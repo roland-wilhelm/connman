@@ -1,0 +1,20 @@
+Arbeitspakete Praktikum BMW
+
+1.	Einrichtung Arbeitzplatz
+		-	Absprache GIT Repository
+		-	Einrichtung IDE
+		- 	Einrichtung Cross-Development
+
+2.	Verbindungsmanger ConnMan
+
+
+
+3.	Bibliothek libqmi
+		- 	Migration der alten libqmi-glib
+		-	Anpassung und Erweiterung libqmi-dbus
+
+
+4.	Webservices
+		-	Steuerung der libqmi-dbus
+		-	Visualisierung der Verbindungsdaten
+		-	Android App (Dennis) und evtl. Webanwendung
