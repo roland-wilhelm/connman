@@ -315,6 +315,11 @@ AC_ARG_ENABLE(ofono, AC_HELP_STRING([--disable-ofono],
 					[enable_ofono=${enableval}])
 AM_CONDITIONAL(OFONO, test "${enable_ofono}" != "no")
 
+AC_ARG_ENABLE(qmi, AC_HELP_STRING([--disable-qmi],
+				[disable QMI support]),
+					[enable_qmi=${enableval}])
+AM_CONDITIONAL(QMI, test "${enable_qmi}" != "no")
+
 AC_ARG_ENABLE(dundee, AC_HELP_STRING([--disable-dundee],
 				[disable dundee support (Bluetooth DUN)]),
 					[enable_dundee=${enableval}])

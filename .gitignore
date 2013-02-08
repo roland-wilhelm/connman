@@ -24,7 +24,8 @@ ltmain.sh
 missing
 stamp-h1
 autom4te.cache
-
+Debug/
+.settings/
 connman.pc
 include/connman
 include/version.h
