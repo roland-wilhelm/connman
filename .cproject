@@ -74,6 +74,16 @@
 							<tool id="cdt.managedbuild.tool.gnu.c.compiler.exe.debug.946198884" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.exe.debug">
 								<option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.exe.debug.option.optimization.level.983244326" name="Optimization Level" superClass="gnu.c.compiler.exe.debug.option.optimization.level" valueType="enumerated"/>
 								<option id="gnu.c.compiler.exe.debug.option.debugging.level.1873265573" name="Debug Level" superClass="gnu.c.compiler.exe.debug.option.debugging.level" value="gnu.c.debugging.level.max" valueType="enumerated"/>
+								<option id="gnu.c.compiler.option.include.paths.887272761" superClass="gnu.c.compiler.option.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/connman/gdbus}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/connman/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/connman/include/connman}&quot;"/>
+									<listOptionValue builtIn="false" value="/usr/include/glib-2.0"/>
+									<listOptionValue builtIn="false" value="/usr/lib/x86_64-linux-gnu/glib-2.0/include"/>
+									<listOptionValue builtIn="false" value="/usr/include/p11-kit-1"/>
+									<listOptionValue builtIn="false" value="/usr/include/dbus-1.0"/>
+									<listOptionValue builtIn="false" value="/usr/lib/x86_64-linux-gnu/dbus-1.0/include"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1061151252" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.linker.exe.debug.219720500" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.exe.debug">
@@ -163,9 +173,13 @@
 			<resource resourceType="PROJECT" workspacePath="/connman"/>
 		</configuration>
 	</storageModule>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.exe.debug.2146502714;cdt.managedbuild.config.gnu.exe.debug.2146502714.;cdt.managedbuild.tool.gnu.c.compiler.exe.debug.946198884;cdt.managedbuild.tool.gnu.c.compiler.input.1061151252">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.exe.debug.2146502714;cdt.managedbuild.config.gnu.exe.debug.2146502714.;cdt.managedbuild.tool.gnu.cpp.compiler.exe.debug.1845923292;cdt.managedbuild.tool.gnu.cpp.compiler.input.2101119172">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="0.2086717680">
@@ -175,5 +189,4 @@
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		</scannerConfigBuildInfo>
 	</storageModule>
-	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>
