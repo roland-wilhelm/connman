@@ -6,6 +6,8 @@
 .libs
 .dirstamp
 .metadata/
+.project
+.cproject
 Makefile
 Makefile.in
 aclocal.m4
