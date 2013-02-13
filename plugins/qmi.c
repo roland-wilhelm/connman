@@ -46,47 +46,164 @@ struct qmi_data {
 	gchar *node;
 	gchar *interface;
 	guint8 strength;
-	connman_bool_t roaming;
-	connman_bool_t online;
+	connman_bool_t device_connected;
+	connman_bool_t service_connected;
+	connman_bool_t device_disconnecting;
+	connman_bool_t service_disconnecting;
+	connman_bool_t modem_roaming;
+	connman_bool_t modem_online;
 	struct connman_device *device;
 	struct connman_network *network;
 };
 
+static void remove_network(struct qmi_data *qmi)
+{
+	g_return_if_fail(qmi);
+
+	DBG("%s", qmi->path);
+
+	if (qmi->network == NULL)
+		return;
+
+	DBG("network %p", qmi->network);
+
+	connman_device_remove_network(qmi->device, qmi->network);
+	connman_network_unref(qmi->network);
+	qmi->network = NULL;
+}
+
+static void add_network(struct qmi_data *qmi)
+{
+	struct connman_network *network = NULL;
+
+	g_return_if_fail(qmi);
+
+	DBG("data %p", qmi);
+
+	if(qmi->network != NULL)
+		return;
+
+	network = connman_device_get_network(qmi->device, "qmi");
+	DBG("network %p already exists, update properties", network);
+	if(network == NULL) {
+
+		qmi->network = connman_network_create(	"qmi",
+												CONNMAN_NETWORK_TYPE_CELLULAR);
+		if(qmi->network == NULL) {
+
+			connman_error("Network could not be created.");
+			return;
+		}
+
+		DBG("network %p", qmi->network);
+
+		connman_network_set_index(qmi->network, qmi->index);
+		connman_network_set_data(qmi->network, qmi);
+
+		if(connman_device_add_network(qmi->device, qmi->network) < 0) {
+
+			connman_network_unref(qmi->network);
+			qmi->network = NULL;
+			return;
+		}
+	}
+
+	connman_network_set_string(qmi->network, "Path", qmi->path);
+
+	if(qmi->name != NULL)
+		connman_network_set_name(qmi->network, qmi->name);
+	else
+		connman_network_set_name(qmi->network, "qmiName");
+
+//	connman_network_set_strength(qmi->network, qmi->strength);
+//	connman_network_set_group(qmi->network, qmi->group);
+	connman_network_set_group(qmi->network, "qmiGroup");
+
+	/*
+	 * TODO: connman_network_set_strength
+	 * connman_network_set_frequency
+	 * connman_network_set_bool(qmi->network, "Roaming", qmi->modem_roaming);
+	 * connman_network_update(connman_network);
+	 */
+
+
+
+	//connman_network_set_available(qmi->network, TRUE);
+
+}
+
 static int network_probe(struct connman_network *network)
 {
-	struct qmi_data *qmi = connman_network_get_data(network);
-
-	DBG("Ńetwork %p", network);
+	DBG("network %p", network);
 
 	return 0;
 }
 
 static void network_remove(struct connman_network *network)
 {
-	struct qmi_data *qmi = connman_network_get_data(network);
+	struct qmi_data *qmi = NULL;
 
-	DBG("Network %p", network);
+	DBG("network %p", network);
 
+	g_return_if_fail(network);
 
+	qmi = connman_network_get_data(network);
+	if(!qmi) {
+
+		connman_error("Could not get device data.");
+		return;
+	}
+
+	DBG("network %p data %p", network, qmi);
+
+	remove_network(qmi);
 }
 
 static int network_connect(struct connman_network *network)
 {
-	struct qmi_data *qmi = connman_network_get_data(network);
+	struct qmi_data *qmi = NULL;
+	int err = 0;
 
 	DBG("Network %p", network);
 
+	qmi = connman_network_get_data(network);
+	if(!qmi) {
+
+		connman_error("Could not get device data.");
+		return -ENODEV;
+	}
+
+	DBG("Network %p %p", network, qmi);
+
+	/*
+	 * TODO: Verbindung qmi-dbus-server wird automatish beim aktivieren des
+	 * 		 Serves hergestellt. Sobald die Verbindungs hergestellt ist, kann
+	 * 		 das Netzwerk hinzugefügt werden.
+	 * 		 Mögliche Parameter: SSID = Provider evtl. Provider+Technology
+	 * 		 					 Strength = RSSI oder SNR
+	 * 		 					 Frequenz = Frequenz für LTE
+	 */
+
+
+//	err = connman_network_set_connected(network, TRUE);
+//	if(err < 0) {
+//
+//		connman_error("State could not be set to connected=TRUE.");
+//		return err;
+//	}
 
 
 	return 0;
+
 }
 
 static int network_disconnect(struct connman_network *network)
 {
 	struct qmi_data *qmi = connman_network_get_data(network);
 
-	DBG("Network %p", network);
+	DBG("Network %p %p", network, qmi);
 
+	//connman_network_set_connected(network, FALSE);
 
 	return 0;
 }
@@ -104,60 +221,124 @@ static int qmi_probe(struct connman_device *device)
 {
 	struct qmi_data *qmi;
 
-	DBG("Device %p", device);
+	DBG("device %p", device);
 
+	g_return_val_if_fail(device, -ENODEV);
+
+	qmi = g_try_new0(struct qmi_data, 1);
+	if(qmi == NULL) {
+
+		connman_error("Allocation error, no memory available.");
+		return -ENOMEM;
+	}
+
+	DBG("device %p data %p", device, qmi);
+
+	qmi->device_connected = FALSE;
+	qmi->service_connected = TRUE;
+	qmi->modem_online = TRUE;
+	qmi->modem_roaming = FALSE;
+	qmi->strength = 0;
+
+	connman_device_set_data(device, qmi);
+	qmi->device = connman_device_ref(device);
+	qmi->index = connman_device_get_index(device);
+	qmi->name = connman_device_get_string(device, "Name");
+	qmi->node = connman_device_get_string(device, "Node");
+	qmi->interface = connman_device_get_string(device, "Interface");
+	qmi->path = g_strdup("/dev/cdc-wdm0");
+	connman_device_set_string(device, "Path", qmi->path);
 
 	return 0;
 }
 
 static void qmi_remove(struct connman_device *device)
 {
+	struct qmi_data *qmi = NULL;
+
+	DBG("device %p", device);
+
 	g_return_if_fail(device);
 
-	struct qmi_data *qmi = connman_device_get_data(device);
+	qmi = connman_device_get_data(device);
 	if(!qmi) {
 
 		connman_error("Could not get device data");
 		return;
 	}
 
-	DBG("Device %p %p", device, qmi);
+	DBG("device %p data %p", device, qmi);
 
-	connman_device_set_data(device, NULL);
 
-	g_free(qmi);
+
 }
 
 static int qmi_enable(struct connman_device *device)
 {
-	g_return_if_fail(device);
+	int err = 0;
+	struct qmi_data *qmi = NULL;
 
-	struct qmi_data *qmi = connman_device_get_data(device);
+	DBG("device %p", device);
+
+	g_return_val_if_fail(device, -ENODEV);
+
+	qmi = connman_device_get_data(device);
 	if(!qmi) {
 
 		connman_error("Could not get device data");
 		return -ENODEV;
 	}
 
-	DBG("Device %p", device);
+	DBG("device %p data %p", device, qmi);
 
-	qmi->address = connman_device_get_string(device, "Address");
-	qmi->name = connman_device_get_string(device, "Name");
-	qmi->node = connman_device_get_string(device, "Node");
-	qmi->interface = connman_device_get_string(device, "Interface");
-	qmi->path = connman_device_get_string(device, "Path");
-	qmi->index = connman_device_get_index(device);
+	err = connman_inet_ifup(qmi->index);
+	if(err < 0) {
 
-	return connman_inet_ifup(qmi->index);
+		connman_error("QMI device could not getting up with ifup");
+		return err;
+	}
+
+	add_network(qmi);
+
+
+	return 0;
 }
 
 static int qmi_disable(struct connman_device *device)
 {
-	struct qmi_data *qmi = connman_device_get_data(device);
+	int err = 0;
+	struct qmi_data *qmi = NULL;
 
-	DBG("Device %p %p", device, qmi);
+	DBG("device %p", device);
 
-	return connman_inet_ifdown(qmi->index);
+	g_return_val_if_fail(device, -ENODEV);
+
+	qmi = connman_device_get_data(device);
+	if(!qmi) {
+
+		connman_error("Could not get device data");
+		return -ENODEV;
+	}
+
+	DBG("device %p data %p", device, qmi);
+	err = connman_inet_ifdown(qmi->index);
+	if(err < 0) {
+
+		connman_error("QMI device could not getting up with ifup");
+		return err;
+	}
+
+	/*
+	 * TODO: Entfernen der Netzwerke;
+	 * 		 qmi-dbus-server runterfahren;
+	 * 		 Allokierte Bereiche wieder freigeben;
+	 */
+
+	//connman_device_set_powered(qmi->device, FALSE);
+	//connman_device_set_data(device, NULL);
+	//connman_device_unref(qmi->device);
+
+	return 0;
 }
 
 
@@ -206,153 +387,6 @@ static void remove_qmi(gpointer data)
 	g_free(qmi);
 }
 
-static void remove_network(struct qmi_data *qmi)
-{
-	g_return_if_fail(qmi);
-
-	DBG("%s", qmi->path);
-
-	if (qmi->network == NULL)
-		return;
-
-	DBG("network %p", qmi->network);
-
-	connman_device_remove_network(qmi->device, qmi->network);
-	connman_network_unref(qmi->network);
-	qmi->network = NULL;
-}
-
-static void add_network(struct qmi_data *qmi)
-{
-	g_return_if_fail(qmi);
-
-	DBG("%s", qmi->path);
-
-	if (qmi->network != NULL)
-		return;
-
-	qmi->network = connman_network_create(	qmi->path,
-											CONNMAN_NETWORK_TYPE_CELLULAR);
-	if (qmi->network == NULL) {
-
-		connman_error("Network could not be created.");
-		return;
-	}
-
-	DBG("network %p", qmi->network);
-
-	connman_network_set_data(qmi->network, qmi);
-	connman_network_set_string(	qmi->network, "Path", qmi->path);
-
-	if (qmi->name != NULL)
-		connman_network_set_name(qmi->network, qmi->name);
-	else
-		connman_network_set_name(qmi->network, "");
-
-	connman_network_set_strength(qmi->network, qmi->strength);
-	connman_network_set_group(qmi->network, qmi->group);
-	connman_network_set_bool(qmi->network, "Roaming", qmi->roaming);
-
-	if (connman_device_add_network(qmi->device, qmi->network) < 0) {
-		connman_network_unref(qmi->network);
-		qmi->network = NULL;
-		return;
-	}
-}
-
-static void create_device(struct qmi_data *qmi)
-{
-	struct connman_device *device;
-	char *ident = NULL;
-
-	g_return_if_fail(qmi);
-
-	DBG("%s", qmi->path);
-
-	if (qmi->imsi != NULL) {
-
-		ident = qmi->imsi;
-	}
-	else if (qmi->serial != NULL) {
-
-		ident = qmi->serial;
-	}
-	else {
-
-		qmi->imsi = g_strdup("noIdentGiven");
-		ident = qmi->imsi;
-	}
-
-
-	if (connman_dbus_validate_ident(ident) == FALSE)
-		ident = connman_dbus_encode_string(ident);
-	else
-		ident = g_strdup(ident);
-
-	device = connman_device_create("qmi", CONNMAN_DEVICE_TYPE_CELLULAR);
-	if (device == NULL) {
-
-		connman_error("Failed to create device");
-		g_free(ident);
-		return;
-	}
-
-	DBG("Device %p", device);
-	connman_device_set_ident(device, ident);
-	connman_device_set_string(device, "Path", qmi->path);
-	connman_device_set_data(device, qmi);
-
-	if (connman_device_register(device) < 0) {
-
-		connman_error("Failed to register cellular device");
-		connman_device_unref(device);
-		g_free(ident);
-		return;
-	}
-
-	qmi->device = device;
-	connman_device_set_powered(qmi->device, qmi->online);
-
-	add_network(qmi);
-
-}
-
-static void add_qmi(const char *path)
-{
-	struct qmi_data *qmi;
-
-	g_return_if_fail(path);
-
-	DBG("%s", path);
-
-	/*
-	 * FIXME: Benötigte Werte über D-Bus abfragen.
-	 */
-
-	qmi = g_hash_table_lookup(qmi_hash, path);
-	if (qmi != NULL) {
-
-		return;
-	}
-
-	qmi = g_try_new0(struct qmi_data, 1);
-	if (qmi == NULL) {
-
-		connman_error("Allocation error, no memory available.");
-		return;
-	}
-
-	g_hash_table_insert(qmi_hash, g_strdup(path), qmi);
-
-	qmi->strength = 80;
-	qmi->path = g_strdup(path);
-	qmi->imsi = g_strdup("atWork");
-	qmi->group = g_strdup("qmi");
-	qmi->name = g_strdup("o2-provider");
-
-	create_device(qmi);
-}
-
 static void on_handle_qmi_connect(DBusConnection *conn, void *user_data) {
 
 	/*
@@ -372,7 +406,6 @@ static void on_handle_qmi_connect(DBusConnection *conn, void *user_data) {
 		return;
 	}
 
-	add_qmi("/dev/cdc-wdm10");
 
 }
 
@@ -405,7 +438,7 @@ static void tech_remove(struct connman_technology *technology)
 
 static struct connman_technology_driver tech_driver = {
 	.name		= "cellular",
-	.type		= CONNMAN_DEVICE_TYPE_CELLULAR,
+	.type		= CONNMAN_SERVICE_TYPE_CELLULAR,
 	.probe		= tech_probe,
 	.remove		= tech_remove,
 };
@@ -452,20 +485,13 @@ static int qmi_init(void)
 //		return -EIO;
 //	}
 
-	err = connman_technology_driver_register(&tech_driver);
-	if (err < 0) {
 
-		connman_error("Register technology driver");
-
-		return err;
-	}
 
 	err = connman_network_driver_register(&network_driver);
 	if (err < 0) {
 
 		connman_error("Register network driver");
 		connman_technology_driver_unregister(&tech_driver);
-
 		return err;
 	}
 
@@ -475,10 +501,15 @@ static int qmi_init(void)
 		connman_error("Register device driver");
 		connman_technology_driver_unregister(&tech_driver);
 		connman_network_driver_unregister(&network_driver);
-
 		return err;
 	}
 
+	err = connman_technology_driver_register(&tech_driver);
+	if (err < 0) {
+
+		connman_error("Register technology driver");
+		return err;
+	}
 
 	return 0;
 }
