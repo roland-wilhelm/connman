@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <glib.h>
 #include <glib/gprintf.h>
+#include <errno.h>
 
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #include <connman/plugin.h>
@@ -44,17 +45,15 @@ struct qmi_data {
 	gchar *group;
 	gchar *devname;
 	guint8 strength;
-	connman_bool_t device_connected;
+	connman_bool_t device_enabled;
 	connman_bool_t service_connected;
-	connman_bool_t device_disconnecting;
-	connman_bool_t service_disconnecting;
 	connman_bool_t modem_roaming;
 	connman_bool_t modem_online;
 	struct connman_device *device;
 	struct connman_network *network;
 };
 
-static void remove_network(struct qmi_data *qmi)
+static void delete_network(struct qmi_data *qmi)
 {
 	g_return_if_fail(qmi);
 
@@ -66,7 +65,6 @@ static void remove_network(struct qmi_data *qmi)
 	DBG("network %p", qmi->network);
 
 	connman_device_remove_network(qmi->device, qmi->network);
-	connman_network_unref(qmi->network);
 	qmi->network = NULL;
 }
 
@@ -74,90 +72,87 @@ static void add_network(struct qmi_data *qmi)
 {
 	struct connman_network *network = NULL;
 	int index;
+	gchar *ident = NULL;
 
 	g_return_if_fail(qmi);
 
 	DBG("data %p", qmi);
 
+	if(qmi->network != NULL) {
 
-	network = connman_network_create(ident,
-					CONNMAN_NETWORK_TYPE_CELLULAR);
-	if (network == NULL)
+		DBG("network %p already exists.", qmi->network);
 		return;
+	}
+
+	network = connman_network_create(qmi->path,
+					CONNMAN_NETWORK_TYPE_CELLULAR);
+	if(network == NULL) {
+
+		connman_error("Network could not be created.");
+		return;
+	}
+
+	DBG("network %p", qmi->network);
 
 	index = connman_device_get_index(qmi->device);
 	connman_network_set_index(network, index);
 	connman_network_set_name(network, qmi->name);
 	connman_network_set_data(network, qmi);
 	connman_network_set_strength(network, qmi->strength);
+	connman_network_set_group(network, qmi->group);
+
+
+	/*
+	 * TODO: connman_network_set_strength
+	 * connman_network_set_frequency
+	 * connman_network_set_bool(qmi->network, "Roaming", qmi->modem_roaming);
+	 * connman_network_update(connman_network);
+	 */
 
 	if (connman_device_add_network(qmi->device, network) < 0) {
+
 		connman_network_unref(network);
+		network = NULL;
 		return;
 	}
 
-	connman_network_set_group(network, qmi->group);
-
 	qmi->network = network;
-
-//
-//	if(qmi->network != NULL)
-//		return;
-
-//	network = connman_device_get_network(qmi->device, "qmi");
-//	DBG("network %p already exists, update properties", network);
-//	if(network == NULL) {
-//
-//		qmi->network = connman_network_create(	"qmi",
-//												CONNMAN_NETWORK_TYPE_CELLULAR);
-//		if(qmi->network == NULL) {
-//
-//			connman_error("Network could not be created.");
-//			return;
-//		}
-//
-//		DBG("network %p", qmi->network);
-//
-//		connman_network_set_index(qmi->network, qmi->index);
-//		connman_network_set_data(qmi->network, qmi);
-//
-//		if(connman_device_add_network(qmi->device, qmi->network) < 0) {
-//
-//			connman_network_unref(qmi->network);
-//			qmi->network = NULL;
-//			return;
-//		}
-//	}
-//
-//	connman_network_set_string(qmi->network, "Path", qmi->path);
-//
-//	if(qmi->name != NULL)
-//		connman_network_set_name(qmi->network, qmi->name);
-//	else
-//		connman_network_set_name(qmi->network, "qmiName");
-//
-////	connman_network_set_strength(qmi->network, qmi->strength);
-////	connman_network_set_group(qmi->network, qmi->group);
-//	connman_network_set_group(qmi->network, "qmiGroup");
-//
-//	/*
-//	 * TODO: connman_network_set_strength
-//	 * connman_network_set_frequency
-//	 * connman_network_set_bool(qmi->network, "Roaming", qmi->modem_roaming);
-//	 * connman_network_update(connman_network);
-//	 */
-//
-//
-//
-//	//connman_network_set_available(qmi->network, TRUE);
 
 }
 
 static int network_probe(struct connman_network *network)
 {
+	struct qmi_data *qmi = NULL;
+
 	DBG("network %p", network);
 
-	return 0;
+	g_return_val_if_fail(network, -ENODEV);
+
+	qmi = connman_network_get_data(network);
+	if(!qmi) {
+
+		connman_error("No device data available.");
+		return -ENODEV;
+	}
+
+	DBG("network %p data %p", network, qmi);
+
+	/*
+	 * FIXME: Netzwerk erst hinzufügen, wenn Verbindung mit QMI Device
+	 * über D-Bus hergestellt wurde.
+	 */
+	if((qmi->modem_online == TRUE) && (qmi->service_connected == TRUE)) {
+
+		add_network(qmi);
+		return 0;
+	}
+	else {
+
+		connman_error("Modem is not online or the QMI D-Bus server is not activated.");
+		return -ENODEV;
+	}
+
+
 }
 
 static void network_remove(struct connman_network *network)
@@ -171,13 +166,13 @@ static void network_remove(struct connman_network *network)
 	qmi = connman_network_get_data(network);
 	if(!qmi) {
 
-		connman_error("Could not get device data.");
+		connman_error("No  device data available.");
 		return;
 	}
 
 	DBG("network %p data %p", network, qmi);
 
-	remove_network(qmi);
+	delete_network(qmi);
 }
 
 static int network_connect(struct connman_network *network)
@@ -227,6 +222,22 @@ static struct connman_network_driver network_driver = {
 	.disconnect	= network_disconnect,
 };
 
+static gchar* get_device_path_from_name(const gchar *devname) {
+
+	gchar *device_path = NULL;
+
+	DBG("device name %s", devname);
+
+	g_return_val_if_fail(devname, NULL);
+
+	device_path = g_strdup("/dev/cdc-wdm0");
+
+	DBG("device name %s path %s", devname, device_path);
+
+	return device_path;
+}
+
+
 static int qmi_probe(struct connman_device *device)
 {
 	struct qmi_data *qmi;
@@ -247,10 +258,11 @@ static int qmi_probe(struct connman_device *device)
 	connman_device_set_data(device, qmi);
 	qmi->device = connman_device_ref(device);
 
-	qmi->device_connected = FALSE;
+	qmi->device_enabled = FALSE;
 	qmi->service_connected = TRUE;
 	qmi->modem_online = TRUE;
 	qmi->modem_roaming = FALSE;
+
 	/*
 	 * TODO: Werte werden vom D-Bus ermittelt und sollen später auf
 	 * 0 gesetzt werde.
@@ -263,13 +275,18 @@ static int qmi_probe(struct connman_device *device)
 	/* Name of the provider e.g "o2" */
 	qmi->name = g_strdup("o2");
 	/* Name of the specific QMI-Device e.g. wwan0 */
-	qmi->devname = connman_device_get_string(device, "Name");
+	qmi->devname = g_strdup(connman_device_get_string(device, "Name"));
 	/* Index of the specific QMI-Device */
 	qmi->index = connman_device_get_index(device);
 	/*
 	 * TODO: Pfad muss noch automatisch durch devname bestimmt werden.
 	 */
-	qmi->path = g_strdup("/dev/cdc-wdm0");
+	qmi->path = get_device_path_from_name(qmi->devname);
+	if(qmi->path == NULL) {
+
+		connman_error("No device path available");
+		return -ENODEV;
+	}
 	connman_device_set_string(device, "Path", qmi->path);
 
 	return 0;
@@ -292,6 +309,17 @@ static void qmi_remove(struct connman_device *device)
 
 	DBG("device %p data %p", device, qmi);
 
+	connman_device_set_data(device, NULL);
+	connman_device_unref(qmi->device);
+
+	g_free(qmi->serial);
+	g_free(qmi->name);
+	g_free(qmi->imsi);
+	g_free(qmi->path);
+	g_free(qmi->devname);
+	g_free(qmi->group);
+	g_free(qmi);
+
 }
 
 static int qmi_enable(struct connman_device *device)
@@ -306,7 +334,7 @@ static int qmi_enable(struct connman_device *device)
 	qmi = connman_device_get_data(device);
 	if(!qmi) {
 
-		connman_error("Could not get device data");
+		connman_error("No device data available");
 		return -ENODEV;
 	}
 
@@ -319,6 +347,7 @@ static int qmi_enable(struct connman_device *device)
 		return err;
 	}
 
+	qmi->device_enabled = TRUE;
 	add_network(qmi);
 
 	return 0;
@@ -344,19 +373,18 @@ static int qmi_disable(struct connman_device *device)
 	err = connman_inet_ifdown(qmi->index);
 	if(err < 0) {
 
-		connman_error("QMI device could not getting up with ifup");
+		connman_error("QMI device could not getting down with ifdown");
 		return err;
 	}
 
+	qmi->device_enabled = FALSE;
 	/*
 	 * TODO: Entfernen der Netzwerke;
 	 * 		 qmi-dbus-server runterfahren;
 	 * 		 Allokierte Bereiche wieder freigeben;
 	 */
 
-
-	connman_device_set_data(device, NULL);
-	connman_device_unref(qmi->device);
+	delete_network(qmi);
 
 	return 0;
 }
@@ -371,40 +399,7 @@ static struct connman_device_driver qmi_driver = {
 	.disable	= qmi_disable,
 };
 
-static void remove_device(struct qmi_data *qmi)
-{
 
-	g_return_if_fail(qmi);
-
-	DBG("%s", qmi->path);
-
-	//connman_device_set_powered(qmi->device, FALSE);
-
-	if(qmi->network != NULL) {
-		connman_device_remove_network(qmi->device, qmi->network);
-		connman_network_unref(qmi->network);
-		qmi->network = NULL;
-	}
-
-	connman_device_unref(qmi->device);
-	qmi->device = NULL;
-}
-
-static void remove_qmi(gpointer data)
-{
-	struct qmi_data *qmi = data;
-
-	DBG("%s", qmi->path);
-
-	if(qmi->device != NULL)
-		remove_device(qmi);
-
-	g_free(qmi->serial);
-	g_free(qmi->name);
-	g_free(qmi->imsi);
-	g_free(qmi->path);
-	g_free(qmi);
-}
 
 static void on_handle_qmi_connect(DBusConnection *conn, void *user_data) {
 
@@ -418,12 +413,13 @@ static void on_handle_qmi_connect(DBusConnection *conn, void *user_data) {
 
 	DBG("");
 
-	qmi_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, remove_qmi);
-	if (qmi_hash == NULL) {
+//	qmi_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, remove_qmi);
+//	if (qmi_hash == NULL) {
+//
+//		connman_error("Hash table could not be created.");
+//		return;
+//	}
 
-		connman_error("Hash table could not be created.");
-		return;
-	}
 
 
 }
