@@ -35,6 +35,10 @@ static GHashTable *qmi_hash = NULL;
 
 #define QMI_SERVICE "de.bmw.ltz4.qmi"
 
+const static gchar *QMI_DEVICE_DIR_1 = "/sys/class/net/";
+const static gchar *QMI_DEVICE_DIR_2 = "/device/usb/";
+const static gchar *QMI_DEVICE		 = "cdc-wdm";
+
 
 struct qmi_data {
 	gint index;
@@ -111,6 +115,7 @@ static void add_network(struct qmi_data *qmi)
 
 	if (connman_device_add_network(qmi->device, network) < 0) {
 
+		connman_error("Network not added to the device.");
 		connman_network_unref(network);
 		network = NULL;
 		return;
@@ -225,16 +230,55 @@ static struct connman_network_driver network_driver = {
 static gchar* get_device_path_from_name(const gchar *devname) {
 
 	gchar *device_path = NULL;
+	GString *dev;
+	GDir *dir = NULL;
+	gboolean ret;
+	GError *error;
 
 	DBG("device name %s", devname);
 
 	g_return_val_if_fail(devname, NULL);
 
-	device_path = g_strdup("/dev/cdc-wdm0");
+	/*
+	 * TODO: Pfad zu Gerätenamen devname
+	 * 		 1. In sys/class/net/ muss devname als ordner vorhanden sein
+	 * 		 2. In sys/class/net/devname/device/usb/cdc-wdm0
+	 */
 
-	DBG("device name %s path %s", devname, device_path);
+	dev = g_string_new(QMI_DEVICE_DIR_1);
+	dev = g_string_append(dev, devname);
+	DBG("path QMI device %s", dev->str);
+	ret = g_file_test(dev->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
+	if(ret == FALSE) {
 
-	return device_path;
+		connman_error("Path %s not exists", dev->str);
+		g_string_free(dev, TRUE);
+		return NULL;
+	}
+
+	dev = g_string_append(dev, QMI_DEVICE_DIR_2);
+	DBG("path QMI device %s", dev->str);
+	dir = g_dir_open(dev->str, 0, &error);
+	if(dir == NULL) {
+
+		connman_error("open path %s not possible, error %s", dev->str, error->message);
+		g_string_free(dev, TRUE);
+		g_error_free(error);
+		error = NULL;
+		return NULL;
+
+	}
+	device_path = g_dir_read_name(dir);
+
+	g_string_free(dev, TRUE);
+	dev = g_string_new(device_path);
+	dev = g_string_prepend(dev, "/dev/");
+
+	DBG("device name %s path %s", devname, dev->str);
+
+	g_dir_close(dir);
+
+	return g_string_free(dev, FALSE);
 }
 
 
@@ -257,7 +301,7 @@ static int qmi_probe(struct connman_device *device)
 
 	connman_device_set_data(device, qmi);
 	qmi->device = connman_device_ref(device);
-
+	qmi->network = NULL;
 	qmi->device_enabled = FALSE;
 	qmi->service_connected = TRUE;
 	qmi->modem_online = TRUE;
@@ -275,18 +319,23 @@ static int qmi_probe(struct connman_device *device)
 	/* Name of the provider e.g "o2" */
 	qmi->name = g_strdup("o2");
 	/* Name of the specific QMI-Device e.g. wwan0 */
-	qmi->devname = g_strdup(connman_device_get_string(device, "Name"));
+	qmi->devname = g_strdup(connman_device_get_string(device, "Interface"));
 	/* Index of the specific QMI-Device */
 	qmi->index = connman_device_get_index(device);
 	/*
 	 * TODO: Pfad muss noch automatisch durch devname bestimmt werden.
 	 */
 	qmi->path = get_device_path_from_name(qmi->devname);
-	if(qmi->path == NULL) {
-
-		connman_error("No device path available");
-		return -ENODEV;
-	}
+	DBG("device name %s path %s", qmi->devname, qmi->path);
+//	if(qmi->path == NULL) {
+//
+//		connman_error("No device path available");
+//		return -ENODEV;
+//	}
+	/*
+	 * FIXME: Falls ein unsinniger Pfad übergebn wird, kann es zu Endlosschleifen
+	 * kommen.
+	 */
 	connman_device_set_string(device, "Path", qmi->path);
 
 	return 0;

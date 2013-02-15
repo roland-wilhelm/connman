@@ -1,4 +1,4 @@
-Arbeitspakete Praktikum BMW
+Arbeitspakete
 
 1.	Einrichtung Arbeitzplatz
 		-	Absprache GIT Repository
