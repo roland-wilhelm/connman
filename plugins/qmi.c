@@ -138,20 +138,17 @@ static int network_probe(struct connman_network *network)
 	DBG("network %p data %p", network, qmi);
 
 	/*
-	 * FIXME: Netzwerk erst hinzufügen, wenn Verbindung mit QMI Device
-	 * über D-Bus hergestellt wurde.
+	 * FIXME: Netzwerk entfernen, wenn Verbindung mit QMI Device
+	 * oder modem nicht mehr online ist.
 	 */
-	if((qmi->modem_online == TRUE) && (qmi->service_connected == TRUE)) {
+//	if((qmi->modem_online == FALSE) && (qmi->service_connected == TRUE)) {
+//
+//		connman_error("Modem is not online or the QMI D-Bus server is not activated.");
+//		return -ENODEV;
+//	}
 
-		add_network(qmi);
-		return 0;
-	}
-	else {
 
-		connman_error("Modem is not online or the QMI D-Bus server is not activated.");
-		return -ENODEV;
-	}
-
+	return 0;
 
 }
 
@@ -275,7 +272,7 @@ static int qmi_probe(struct connman_device *device)
 	/* Name of the provider e.g "o2" */
 	qmi->name = g_strdup("o2");
 	/* Name of the specific QMI-Device e.g. wwan0 */
-	qmi->devname = g_strdup(connman_device_get_string(device, "Name"));
+	qmi->devname = g_strdup(connman_device_get_string(device, "Interface"));
 	/* Index of the specific QMI-Device */
 	qmi->index = connman_device_get_index(device);
 	/*
