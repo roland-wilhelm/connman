@@ -111,6 +111,7 @@ static void add_network(struct qmi_data *qmi)
 
 	if (connman_device_add_network(qmi->device, network) < 0) {
 
+		connman_error("Network not added to the device.");
 		connman_network_unref(network);
 		network = NULL;
 		return;
@@ -137,11 +138,12 @@ static int network_probe(struct connman_network *network)
 
 	DBG("network %p data %p", network, qmi);
 
+
 	/*
 	 * FIXME: Netzwerk entfernen, wenn Verbindung mit QMI Device
 	 * oder modem nicht mehr online ist.
 	 */
-//	if((qmi->modem_online == FALSE) && (qmi->service_connected == TRUE)) {
+//	if((qmi->modem_online == FALSE) || (qmi->service_connected == TRUE)) {
 //
 //		connman_error("Modem is not online or the QMI D-Bus server is not activated.");
 //		return -ENODEV;
@@ -175,7 +177,7 @@ static void network_remove(struct connman_network *network)
 static int network_connect(struct connman_network *network)
 {
 	struct qmi_data *qmi = NULL;
-	int err = 0;
+
 
 	DBG("Network %p", network);
 
@@ -222,16 +224,59 @@ static struct connman_network_driver network_driver = {
 static gchar* get_device_path_from_name(const gchar *devname) {
 
 	gchar *device_path = NULL;
+	GString *dev;
+	GDir *dir = NULL;
+	gboolean ret;
+	GError *error;
+	int i;
 
 	DBG("device name %s", devname);
 
 	g_return_val_if_fail(devname, NULL);
 
-	device_path = g_strdup("/dev/cdc-wdm0");
+	dev = g_string_new("/sys/class/net/");
+	dev = g_string_append(dev, devname);
+	DBG("path QMI device %s", dev->str);
+	ret = g_file_test(dev->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
+	if(ret == FALSE) {
 
-	DBG("device name %s path %s", devname, device_path);
+		connman_error("Path %s not exists", dev->str);
+		g_string_free(dev, TRUE);
+		return NULL;
+	}
 
-	return device_path;
+	dev = g_string_append(dev, "/device/usb/");
+	DBG("path QMI device %s", dev->str);
+	dir = g_dir_open(dev->str, 0, &error);
+	if(dir == NULL) {
+
+		connman_error("open path %s not possible, error %s", dev->str, error->message);
+		g_string_free(dev, TRUE);
+		g_error_free(error);
+		error = NULL;
+		return NULL;
+
+	}
+
+//	i = 0;
+//	do {
+
+		device_path = g_dir_read_name(dir);
+//		i++;
+//		if(i > 10) {
+//			return NULL;
+//		}
+//	}while(strncmp(device_path, "cdc-wdm", 7) != NULL);
+
+	g_string_free(dev, TRUE);
+	dev = g_string_new(device_path);
+	dev = g_string_prepend(dev, "/dev/");
+
+	DBG("device name %s path %s", devname, dev->str);
+
+	g_dir_close(dir);
+
+	return g_string_free(dev, FALSE);
 }
 
 
@@ -254,7 +299,7 @@ static int qmi_probe(struct connman_device *device)
 
 	connman_device_set_data(device, qmi);
 	qmi->device = connman_device_ref(device);
-
+	qmi->network = NULL;
 	qmi->device_enabled = FALSE;
 	qmi->service_connected = TRUE;
 	qmi->modem_online = TRUE;
@@ -279,11 +324,13 @@ static int qmi_probe(struct connman_device *device)
 	 * TODO: Pfad muss noch automatisch durch devname bestimmt werden.
 	 */
 	qmi->path = get_device_path_from_name(qmi->devname);
+	DBG("device name %s path %s", qmi->devname, qmi->path);
 	if(qmi->path == NULL) {
 
 		connman_error("No device path available");
 		return -ENODEV;
 	}
+
 	connman_device_set_string(device, "Path", qmi->path);
 
 	return 0;
@@ -305,7 +352,7 @@ static void qmi_remove(struct connman_device *device)
 	}
 
 	DBG("device %p data %p", device, qmi);
-
+	delete_network(qmi);
 	connman_device_set_data(device, NULL);
 	connman_device_unref(qmi->device);
 
