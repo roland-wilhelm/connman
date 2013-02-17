@@ -39,6 +39,7 @@ struct connman_config_service {
 	char *name;
 	char *type;
 	void *ssid;
+	char *apn;
 	unsigned int ssid_len;
 	char *eap;
 	char *identity;
@@ -78,6 +79,7 @@ static connman_bool_t cleanup = FALSE;
 #define SERVICE_KEY_TYPE               "Type"
 #define SERVICE_KEY_NAME               "Name"
 #define SERVICE_KEY_SSID               "SSID"
+#define SERVICE_KEY_APN                "APN"
 #define SERVICE_KEY_EAP                "EAP"
 #define SERVICE_KEY_CA_CERT            "CACertFile"
 #define SERVICE_KEY_CL_CERT            "ClientCertFile"
@@ -100,6 +102,7 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_TYPE,
 	SERVICE_KEY_NAME,
 	SERVICE_KEY_SSID,
+	SERVICE_KEY_APN,
 	SERVICE_KEY_EAP,
 	SERVICE_KEY_CA_CERT,
 	SERVICE_KEY_CL_CERT,
@@ -272,6 +275,12 @@ static int load_service(GKeyFile *keyfile, const char *group,
 	if (str != NULL) {
 		g_free(service->name);
 		service->name = str;
+	}
+
+	str = g_key_file_get_string(keyfile, group, SERVICE_KEY_APN, NULL);
+	if (str != NULL) {
+		g_free(service->apn);
+		service->apn = str;
 	}
 
 	hex_ssid = g_key_file_get_string(keyfile, group, SERVICE_KEY_SSID,
