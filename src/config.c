@@ -166,6 +166,7 @@ free_only:
 	g_free(config_service->type);
 	g_free(config_service->name);
 	g_free(config_service->ssid);
+	g_free(config_service->apn);
 	g_free(config_service->eap);
 	g_free(config_service->identity);
 	g_free(config_service->ca_cert_file);
@@ -417,6 +418,7 @@ err:
 		g_free(service->type);
 		g_free(service->name);
 		g_free(service->ssid);
+		g_free(service->apn);
 		g_free(service);
 	}
 
@@ -673,94 +675,105 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 	unsigned int ssid_len;
 
 	/* For now only WiFi service entries are supported */
-	if (g_strcmp0(config->type, "wifi") != 0)
-		return;
+	if (	(g_strcmp0(config->type, "wifi") == 0) ||
+			(g_strcmp0(config->type, "cellular") == 0)) {
 
-	network = __connman_service_get_network(service);
-	if (network == NULL) {
-		connman_error("Service has no network set");
-		return;
-	}
 
-	ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
-	if (ssid == NULL) {
-		connman_error("Network SSID not set");
-		return;
-	}
+		network = __connman_service_get_network(service);
+		if (network == NULL) {
+			connman_error("Service has no network set");
+			return;
+		}
 
-	if (config->ssid == NULL || ssid_len != config->ssid_len)
-		return;
+		ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
+		if ((g_strcmp0(config->type, "wifi") == 0) &&
+				(ssid == NULL)) {
+			connman_error("Network SSID not set");
+			return;
+		}
 
-	if (memcmp(config->ssid, ssid, ssid_len) != 0)
-		return;
-
-	service_id = __connman_service_get_ident(service);
-	config->service_identifiers =
-		g_slist_prepend(config->service_identifiers,
-				g_strdup(service_id));
-
-	__connman_service_set_immutable(service, TRUE);
-
-	__connman_service_set_favorite_delayed(service, TRUE, TRUE);
-
-	__connman_service_set_config(service, config->config_ident,
-						config->config_entry);
-
-	if (config->eap != NULL)
-		__connman_service_set_string(service, "EAP", config->eap);
-
-	if (config->identity != NULL)
-		__connman_service_set_string(service, "Identity",
-							config->identity);
-
-	if (config->ca_cert_file != NULL)
-		__connman_service_set_string(service, "CACertFile",
-							config->ca_cert_file);
-
-	if (config->client_cert_file != NULL)
-		__connman_service_set_string(service, "ClientCertFile",
-						config->client_cert_file);
-
-	if (config->private_key_file != NULL)
-		__connman_service_set_string(service, "PrivateKeyFile",
-						config->private_key_file);
-
-	if (g_strcmp0(config->private_key_passphrase_type, "fsid") == 0 &&
-					config->private_key_file != NULL) {
-		char *fsid;
-
-		fsid = config_pem_fsid(config->private_key_file);
-		if (fsid == NULL)
+		if ((g_strcmp0(config->type, "wifi") == 0) &&
+				(config->ssid == NULL || ssid_len != config->ssid_len))
 			return;
 
-		g_free(config->private_key_passphrase);
-		config->private_key_passphrase = fsid;
+		if ((g_strcmp0(config->type, "wifi") == 0) &&
+				(memcmp(config->ssid, ssid, ssid_len) != 0))
+			return;
+
+		service_id = __connman_service_get_ident(service);
+		config->service_identifiers =
+			g_slist_prepend(config->service_identifiers,
+					g_strdup(service_id));
+
+		__connman_service_set_immutable(service, TRUE);
+
+		__connman_service_set_favorite_delayed(service, TRUE, TRUE);
+
+		__connman_service_set_config(service, config->config_ident,
+							config->config_entry);
+
+		if (config->eap != NULL)
+			__connman_service_set_string(service, "EAP", config->eap);
+
+		if (config->identity != NULL)
+			__connman_service_set_string(service, "Identity",
+								config->identity);
+
+		if (config->ca_cert_file != NULL)
+			__connman_service_set_string(service, "CACertFile",
+								config->ca_cert_file);
+
+		if (config->client_cert_file != NULL)
+			__connman_service_set_string(service, "ClientCertFile",
+							config->client_cert_file);
+
+		if (config->private_key_file != NULL)
+			__connman_service_set_string(service, "PrivateKeyFile",
+							config->private_key_file);
+
+		if (g_strcmp0(config->private_key_passphrase_type, "fsid") == 0 &&
+						config->private_key_file != NULL) {
+			char *fsid;
+
+			fsid = config_pem_fsid(config->private_key_file);
+			if (fsid == NULL)
+				return;
+
+			g_free(config->private_key_passphrase);
+			config->private_key_passphrase = fsid;
+		}
+
+		if (config->private_key_passphrase != NULL) {
+			__connman_service_set_string(service, "PrivateKeyPassphrase",
+							config->private_key_passphrase);
+			/*
+			 * TODO: Support for PEAP with both identity and key passwd.
+			 * In that case, we should check if both of them are found
+			 * from the config file. If not, we should not set the
+			 * service passphrase in order for the UI to request for an
+			 * additional passphrase.
+			 */
+		}
+
+		if (config->phase2 != NULL)
+			__connman_service_set_string(service, "Phase2", config->phase2);
+
+		if (config->passphrase != NULL)
+			__connman_service_set_string(service, "Passphrase", config->passphrase);
+
+		if (config->apn != NULL)
+				__connman_service_set_string(service, "APN", config->apn);
+
+		if (config->hidden == TRUE)
+			__connman_service_set_hidden(service);
+
+		__connman_service_mark_dirty();
+
+		__connman_service_save(service);
 	}
-
-	if (config->private_key_passphrase != NULL) {
-		__connman_service_set_string(service, "PrivateKeyPassphrase",
-						config->private_key_passphrase);
-		/*
-		 * TODO: Support for PEAP with both identity and key passwd.
-		 * In that case, we should check if both of them are found
-		 * from the config file. If not, we should not set the
-		 * service passphrase in order for the UI to request for an
-		 * additional passphrase.
-		 */
+	else {
+		return;
 	}
-
-	if (config->phase2 != NULL)
-		__connman_service_set_string(service, "Phase2", config->phase2);
-
-	if (config->passphrase != NULL)
-		__connman_service_set_string(service, "Passphrase", config->passphrase);
-
-	if (config->hidden == TRUE)
-		__connman_service_set_hidden(service);
-
-	__connman_service_mark_dirty();
-
-	__connman_service_save(service);
 }
 
 int __connman_config_provision_service(struct connman_service *service)
@@ -773,16 +786,24 @@ int __connman_config_provision_service(struct connman_service *service)
 
 	/* For now only WiFi services are supported */
 	type = connman_service_get_type(service);
-	if (type != CONNMAN_SERVICE_TYPE_WIFI)
-		return -ENOSYS;
+	switch(type) {
 
-	g_hash_table_iter_init(&iter, config_table);
+		case CONNMAN_SERVICE_TYPE_CELLULAR:
+		case CONNMAN_SERVICE_TYPE_WIFI:
 
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-		struct connman_config *config = value;
+			g_hash_table_iter_init(&iter, config_table);
 
-		g_hash_table_foreach(config->service_table,
-						provision_service, service);
+			while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+				struct connman_config *config = value;
+
+				g_hash_table_foreach(config->service_table,
+								provision_service, service);
+			}
+			break;
+
+		default:
+			return -ENOSYS;
+
 	}
 
 	return 0;

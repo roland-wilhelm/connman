@@ -83,6 +83,7 @@ struct connman_service {
 	unsigned int order;
 	char *name;
 	char *passphrase;
+	char *apn;
 	char *agent_passphrase;
 	connman_bool_t roaming;
 	struct connman_ipconfig *ipconfig_ipv4;
@@ -4704,6 +4705,9 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "Passphrase") == TRUE) {
 		g_free(service->passphrase);
 		service->passphrase = g_strdup(value);
+	} else if (g_str_equal(key, "APN") == TRUE) {
+		g_free(service->apn);
+		service->apn = g_strdup(value);
 	}
 }
 

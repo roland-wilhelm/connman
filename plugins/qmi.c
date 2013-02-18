@@ -27,6 +27,7 @@
 #include <connman/dbus.h>
 #include <connman/log.h>
 #include <connman/technology.h>
+#include <connman/service.h>
 
 
 static DBusConnection *connection = NULL;
@@ -73,6 +74,7 @@ static void add_network(struct qmi_data *qmi)
 	struct connman_network *network = NULL;
 	int index;
 	gchar *ident = NULL;
+	struct connman_service *service = NULL;
 
 	g_return_if_fail(qmi);
 
@@ -118,6 +120,11 @@ static void add_network(struct qmi_data *qmi)
 	}
 
 	qmi->network = network;
+
+	service = connman_service_lookup_from_network(network);
+	service = connman_service_ref(service);
+
+	connman_service_unref(service);
 
 }
 
@@ -223,7 +230,7 @@ static struct connman_network_driver network_driver = {
 
 static gchar* get_device_path_from_name(const gchar *devname) {
 
-	gchar *device_path = NULL;
+	const gchar *device_path = NULL;
 	GString *dev;
 	GDir *dir = NULL;
 	gboolean ret;
