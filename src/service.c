@@ -84,6 +84,8 @@ struct connman_service {
 	char *name;
 	char *passphrase;
 	char *apn;
+	char *sim_nr;
+	char *imsi;
 	char *agent_passphrase;
 	connman_bool_t roaming;
 	struct connman_ipconfig *ipconfig_ipv4;
@@ -4708,6 +4710,12 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "APN") == TRUE) {
 		g_free(service->apn);
 		service->apn = g_strdup(value);
+	} else if (g_str_equal(key, "SIM") == TRUE) {
+		g_free(service->sim_nr);
+		service->sim_nr = g_strdup(value);
+	} else if (g_str_equal(key, "IMSI") == TRUE) {
+		g_free(service->imsi);
+		service->imsi = g_strdup(value);
 	}
 }
 
