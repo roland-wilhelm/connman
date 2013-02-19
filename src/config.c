@@ -694,9 +694,11 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 	const void *ssid, *service_id;
 	unsigned int ssid_len;
 
-	/* For now only WiFi service entries are supported */
+	if((g_strcmp0(config->type, "wifi") != 0) &&
+			(g_strcmp0(config->type, "cellular") != 0)) {
 
-	if(g_strcmp0(config->type, "wifi") == 0) {
+		return;
+	}
 
 			network = __connman_service_get_network(service);
 			if (network == NULL) {
@@ -704,19 +706,21 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 				return;
 			}
 
+			if(g_strcmp0(config->type, "wifi") == 0) {
 
-			ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
-			if (ssid == NULL) {
-				connman_error("Network SSID not set");
-				return;
+				ssid = connman_network_get_blob(network, "WiFi.SSID", &ssid_len);
+				if (ssid == NULL) {
+					connman_error("Network SSID not set");
+					return;
+				}
+
+				if (config->ssid == NULL || ssid_len != config->ssid_len)
+					return;
+
+				if (memcmp(config->ssid, ssid, ssid_len) != 0)
+					return;
+
 			}
-
-			if (config->ssid == NULL || ssid_len != config->ssid_len)
-				return;
-
-			if (memcmp(config->ssid, ssid, ssid_len) != 0)
-				return;
-
 
 			service_id = __connman_service_get_ident(service);
 			config->service_identifiers =
@@ -795,9 +799,6 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 
 			__connman_service_save(service);
 
-	}
-
-
 }
 
 int __connman_config_provision_service(struct connman_service *service)
@@ -837,62 +838,66 @@ int __connman_config_provision_service_ident(struct connman_service *service,
 			const char *ident, const char *file, const char *entry)
 {
 	struct connman_config *config;
+	enum connman_service_type type;
 	int ret = 0;
 
 	DBG("service %p", service);
+	type = connman_service_get_type(service);
+	if((type != CONNMAN_SERVICE_TYPE_WIFI) &&
+			(type != CONNMAN_SERVICE_TYPE_CELLULAR)) {
 
-	/* For now only WiFi services are supported */
-	if(g_strcmp0(config->type, "wifi") == 0) {
+		return -ENOSYS;
+	}
 
-			config = g_hash_table_lookup(config_table, ident);
-			if (config != NULL) {
-				GHashTableIter iter;
-				gpointer value, key;
-				gboolean found = FALSE;
+	config = g_hash_table_lookup(config_table, ident);
+	if (config != NULL) {
+		GHashTableIter iter;
+		gpointer value, key;
+		gboolean found = FALSE;
 
-				g_hash_table_iter_init(&iter, config->service_table);
+		g_hash_table_iter_init(&iter, config->service_table);
 
-				/*
-				 * Check if we need to remove individual service if it
-				 * is missing from config file.
-				 */
-				if (file != NULL && entry != NULL) {
-					while (g_hash_table_iter_next(&iter, &key,
-									&value) == TRUE) {
-						struct connman_config_service *config_service;
+		/*
+		 * Check if we need to remove individual service if it
+		 * is missing from config file.
+		 */
+		if (file != NULL && entry != NULL) {
+			while (g_hash_table_iter_next(&iter, &key,
+							&value) == TRUE) {
+				struct connman_config_service *config_service;
 
-						config_service = value;
+				config_service = value;
 
-						if (g_strcmp0(config_service->config_ident,
-										file) != 0)
-							continue;
+				if (g_strcmp0(config_service->config_ident,
+								file) != 0)
+					continue;
 
-						if (g_strcmp0(config_service->config_entry,
-										entry) != 0)
-							continue;
+				if (g_strcmp0(config_service->config_entry,
+								entry) != 0)
+					continue;
 
-						found = TRUE;
-						break;
-					}
-
-					DBG("found %d ident %s file %s entry %s", found, ident,
-										file, entry);
-
-					if (found == FALSE) {
-						/*
-						 * The entry+8 will skip "service_" prefix
-						 */
-						g_hash_table_remove(config->service_table,
-								entry + 8);
-						ret = 1;
-					}
-				}
-
-				g_hash_table_foreach(config->service_table,
-								provision_service, service);
+				found = TRUE;
+				break;
 			}
 
+			DBG("found %d ident %s file %s entry %s", found, ident,
+								file, entry);
+
+			if (found == FALSE) {
+				/*
+				 * The entry+8 will skip "service_" prefix
+				 */
+				g_hash_table_remove(config->service_table,
+						entry + 8);
+				ret = 1;
+			}
+		}
+
+		g_hash_table_foreach(config->service_table,
+						provision_service, service);
 	}
+
+	return ret;
 }
 
 struct connman_config_entry **connman_config_get_entries(void)

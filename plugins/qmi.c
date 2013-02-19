@@ -123,7 +123,7 @@ static void add_network(struct qmi_data *qmi)
 
 	service = connman_service_lookup_from_network(network);
 	service = connman_service_ref(service);
-
+	DBG("service %p", service);
 	connman_service_unref(service);
 
 }
@@ -316,7 +316,7 @@ static int qmi_probe(struct connman_device *device)
 	 * TODO: Werte werden vom D-Bus ermittelt und sollen später auf
 	 * 0 gesetzt werde.
 	 */
-	qmi->imsi = g_strdup("1234567890");
+	qmi->imsi = g_strdup("987654321");
 	qmi->serial = NULL;
 	qmi->group = g_strdup("qmi");
 
