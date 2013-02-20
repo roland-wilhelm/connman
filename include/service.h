@@ -117,6 +117,7 @@ const char *connman_service_get_proxy_url(struct connman_service *service);
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service);
 connman_bool_t connman_service_get_favorite(struct connman_service *service);
 
+const char* connman_service_get_string(struct connman_service *service, const char *key);
 struct connman_service *connman_service_lookup_from_network(struct connman_network *network);
 
 void connman_service_create_ip4config(struct connman_service *service,

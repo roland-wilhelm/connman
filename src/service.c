@@ -4719,6 +4719,32 @@ void __connman_service_set_string(struct connman_service *service,
 	}
 }
 
+const char* connman_service_get_string(struct connman_service *service, const char *key) {
+
+	DBG("service %p key %s", service, key);
+
+	if((service == NULL) || (key == NULL)) {
+
+		return NULL;
+	}
+
+	if(g_str_equal(key, "IMSI") == TRUE) {
+		return service->imsi;
+	}
+	else if(g_str_equal(key, "APN") == TRUE) {
+		return service->apn;
+	}
+	else if(g_str_equal(key, "SIM") == TRUE) {
+		return service->sim_nr;
+	}
+	else if(g_str_equal(key, "Passphrase") == TRUE) {
+		return service->passphrase;
+	}
+
+	return NULL;
+
+}
+
 void __connman_service_set_userconnect(struct connman_service *service,
 						connman_bool_t userconnect)
 {
