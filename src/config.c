@@ -722,6 +722,51 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 
 			}
 
+			if((g_strcmp0(config->type, "cellular") == 0)) {
+
+				const char *group = NULL, *imsi = NULL;
+				GString *str;
+
+				if(connman_network_get_type(network) != CONNMAN_NETWORK_TYPE_CELLULAR)
+					return;
+
+				group = connman_network_get_group(network);
+				if(group == NULL) {
+
+					connman_error("Network IMSI not set");
+					return;
+				}
+
+				if(g_str_has_suffix(group, "_qmi") == FALSE) {
+
+					connman_error("Network IMSI not valid");
+					return;
+				}
+
+				imsi = g_strrstr(group, "_qmi");
+				if(imsi == NULL) {
+
+					connman_error("Network IMSI not valid");
+					return;
+				}
+
+				str = g_string_new_len(group, imsi - group);
+				if(str == NULL) {
+
+					connman_error("Network IMSI not given");
+					return;
+				}
+
+				imsi = g_string_free(str, FALSE);
+
+				if((g_strcmp0(config->imsi, imsi) != 0)) {
+
+					connman_error("No valid IMSI found");
+					return;
+				}
+
+			}
+
 			service_id = __connman_service_get_ident(service);
 			config->service_identifiers =
 				g_slist_prepend(config->service_identifiers,
@@ -809,7 +854,6 @@ int __connman_config_provision_service(struct connman_service *service)
 
 	DBG("service %p", service);
 
-	/* For now only WiFi services are supported */
 	type = connman_service_get_type(service);
 	switch(type) {
 

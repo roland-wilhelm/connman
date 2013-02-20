@@ -265,15 +265,15 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 
 	}
 
-//	i = 0;
-//	do {
+	i = 0;
+	do {
 
 		device_path = g_dir_read_name(dir);
-//		i++;
-//		if(i > 10) {
-//			return NULL;
-//		}
-//	}while(strncmp(device_path, "cdc-wdm", 7) != NULL);
+		i++;
+		if(i > 10) {
+			return NULL;
+		}
+	}while(strncmp(device_path, "cdc-wdm", 7) != 0);
 
 	g_string_free(dev, TRUE);
 	dev = g_string_new(device_path);
@@ -316,9 +316,9 @@ static int qmi_probe(struct connman_device *device)
 	 * TODO: Werte werden vom D-Bus ermittelt und sollen später auf
 	 * 0 gesetzt werde.
 	 */
-	qmi->imsi = g_strdup("987654321");
+	qmi->imsi = g_strdup("123456789");
 	qmi->serial = NULL;
-	qmi->group = g_strdup("qmi");
+	qmi->group = g_strdup("123456789_qmi");
 
 	qmi->strength = 50;
 	/* Name of the provider e.g "o2" */
