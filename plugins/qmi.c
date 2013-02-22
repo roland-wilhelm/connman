@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <semaphore.h>
 
+
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #include <connman/plugin.h>
 #include <connman/device.h>
@@ -33,16 +34,22 @@
 
 static DBusConnection *connection = NULL;
 static GHashTable *qmi_hash = NULL;
-static gboolean on_looping_flag = TRUE;
 static sem_t new_device_sem;
+static GDBusClient *dbus_client = NULL;
+static GDBusProxy *dbus_proxy = NULL;
+static pthread_t init_modems_id;
+static volatile gboolean qmi_service_connected = FALSE;
 
+#define DBUS_QMI_SERVICE 			"de.bmw.ltz4.qmi"
+#define DBUS_QMI_OBJECT_CTL 		"/de/bmw/ltz4/qmi/ctl"
+#define DBUS_QMI_INTERFACE_CTL 		"de.bmw.ltz4.qmi" ".ctl"
 
-#define QMI_SERVICE "de.bmw.ltz4.qmi"
-
-
+#define CTL_DEVICE_OPEN				"ctl_device_open"
+#define CTL_DEVICE_CLOSE			"ctl_device_close"
 
 struct qmi_data {
 
+	pthread_mutex_t qmi_data_lock;
 	gint index;
 	gchar *devpath;
 	gchar *provider;
@@ -76,6 +83,27 @@ struct qmi_data {
 
 };
 
+static void free_hash_values(gpointer data) {
+
+	struct qmi_data *qmi = (struct qmi_data *)data;
+
+	DBG();
+
+	if(qmi == NULL)
+		return;
+
+	g_free(qmi->apn);
+	g_free(qmi->provider);
+	g_free(qmi->imsi);
+	g_free(qmi->devpath);
+	g_free(qmi->devname);
+	g_free(qmi->group);
+	g_free(qmi->passphrase);
+	g_free(qmi->modem.imsi);
+
+	g_free(qmi);
+}
+
 static void delete_network(struct qmi_data *qmi)
 {
 	g_return_if_fail(qmi);
@@ -89,6 +117,7 @@ static void delete_network(struct qmi_data *qmi)
 
 	connman_device_remove_network(qmi->device, qmi->network);
 	qmi->network = NULL;
+
 }
 
 static void add_network(struct qmi_data *qmi)
@@ -124,11 +153,9 @@ static void add_network(struct qmi_data *qmi)
 	connman_network_set_data(network, qmi);
 	connman_network_set_strength(network, qmi->strength);
 	connman_network_set_group(network, qmi->group);
-//	connman_network_set_frequency();
-
+	connman_network_set_bool(network, "Roaming", qmi->modem_roaming);
 	/*
 	 * TODO:
-	 * connman_network_set_bool(qmi->network, "Roaming", qmi->modem_roaming);
 	 * connman_network_update(connman_network);
 	 */
 
@@ -142,6 +169,11 @@ static void add_network(struct qmi_data *qmi)
 
 	qmi->network = network;
 
+	/*
+	 * FIXME: Muss hier weg. Diese Daten müssen vor dem hinzufügen des Netzwerkes
+	 * zur Verfügung stehen.
+	 */
+
 	service = connman_service_lookup_from_network(network);
 	DBG("service %p", service);
 	if(service == NULL) {
@@ -151,14 +183,23 @@ static void add_network(struct qmi_data *qmi)
 	}
 
 	service = connman_service_ref(service);
+	if(qmi->imsi)
+		g_free(qmi->imsi);
 	qmi->imsi = g_strdup(connman_service_get_string(service, "IMSI"));
+
+	if(qmi->apn)
+		g_free(qmi->apn);
 	qmi->apn = g_strdup(connman_service_get_string(service, "APN"));
+
+	if(qmi->passphrase)
+		g_free(qmi->passphrase);
 	qmi->passphrase = g_strdup(connman_service_get_string(service, "Passphrase"));
+
 	DBG("network %p ISMI %s APN %s PW %s", qmi->network, qmi->imsi, qmi->apn, qmi->passphrase);
 	connman_service_unref(service);
 	if((qmi->imsi == NULL) || (qmi->apn == NULL) || (qmi->passphrase == NULL)) {
 
-		connman_error("There are not all required parameters given");
+		connman_error("There are not all required parameters available");
 		return;
 	}
 
@@ -180,18 +221,6 @@ static int network_probe(struct connman_network *network)
 	}
 
 	DBG("network %p data %p", network, qmi);
-
-
-	/*
-	 * FIXME: Netzwerk entfernen, wenn Verbindung mit QMI Device
-	 * oder modem nicht mehr online ist.
-	 */
-//	if((qmi->modem_online == FALSE) || (qmi->service_connected == TRUE)) {
-//
-//		connman_error("Modem is not online or the QMI D-Bus server is not activated.");
-//		return -ENODEV;
-//	}
-
 
 	return 0;
 
@@ -233,17 +262,7 @@ static int network_connect(struct connman_network *network)
 
 	DBG("Network %p %p", network, qmi);
 
-	/*
-	 * TODO: Verbindung qmi-dbus-server wird automatish beim aktivieren des
-	 * 		 Serves hergestellt. Sobald die Verbindungs hergestellt ist, kann
-	 * 		 das Netzwerk hinzugefügt werden.
-	 * 		 Mögliche Parameter: SSID = Provider evtl. Provider+Technology
-	 * 		 					 Strength = RSSI oder SNR
-	 * 		 					 Frequenz = Frequenz für LTE
-	 */
-
 	return 0;
-
 }
 
 static int network_disconnect(struct connman_network *network)
@@ -341,11 +360,14 @@ static int qmi_probe(struct connman_device *device)
 	DBG("device %p data %p", device, qmi);
 
 	connman_device_set_data(device, qmi);
+
+	pthread_mutex_init(&qmi->qmi_data_lock, NULL);
+	pthread_mutex_lock(&qmi->qmi_data_lock);
 	qmi->device = connman_device_ref(device);
 	qmi->network = NULL;
 	qmi->device_enabled = FALSE;
-	qmi->service_connected = TRUE;
-	qmi->modem_online = TRUE;
+	qmi->service_connected = FALSE;
+	qmi->modem_online = FALSE;
 	qmi->modem_roaming = FALSE;
 
 	/*
@@ -377,8 +399,61 @@ static int qmi_probe(struct connman_device *device)
 
 	connman_device_set_string(device, "Path", qmi->devpath);
 	g_hash_table_insert(qmi_hash, qmi->devpath, qmi);
+	pthread_mutex_unlock(&qmi->qmi_data_lock);
+
+	sem_post(&new_device_sem);
 
 	return 0;
+}
+
+static void shutdown_modem_callback(DBusMessage *message, void *user_data) {
+
+	DBG("DBusmessage %p", message);
+
+
+	if(dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		connman_error("%s", dbus_error);
+		return;
+
+	}
+
+}
+
+static void shutdown_modem_append(DBusMessageIter *iter, void *user_data) {
+
+	struct qmi_data *qmi = (struct qmi_data *)user_data;
+
+	DBG("qmi data %p messageIter %p", qmi, iter);
+
+	if((qmi == NULL) || (iter == NULL)) {
+
+		return;
+	}
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_INT32, &qmi->modem.dd);
+
+}
+
+static void shutdown_modem(struct qmi_data *qmi) {
+
+	DBG();
+
+	if(qmi == NULL)
+		return;
+
+	if(qmi_service_connected == FALSE)
+		return;
+
+	g_dbus_proxy_method_call(	dbus_proxy,
+								CTL_DEVICE_CLOSE,
+								shutdown_modem_append,
+								shutdown_modem_callback,
+								qmi,
+								NULL);
+
+
 }
 
 static void qmi_remove(struct connman_device *device)
@@ -398,17 +473,11 @@ static void qmi_remove(struct connman_device *device)
 
 	DBG("device %p data %p", device, qmi);
 	delete_network(qmi);
+	shutdown_modem(qmi);
 	connman_device_set_data(device, NULL);
 	connman_device_unref(qmi->device);
 
-	g_free(qmi->apn);
-	g_free(qmi->provider);
-	g_free(qmi->imsi);
-	g_free(qmi->devpath);
-	g_free(qmi->devname);
-	g_free(qmi->group);
-	g_free(qmi->passphrase);
-	g_free(qmi);
+	g_hash_table_remove(qmi_hash, qmi->devpath);
 
 }
 
@@ -438,7 +507,12 @@ static int qmi_enable(struct connman_device *device)
 	}
 
 	qmi->device_enabled = TRUE;
-	add_network(qmi);
+
+	if(qmi->modem_online == TRUE) {
+
+		add_network(qmi);
+	}
+
 
 	return 0;
 }
@@ -468,11 +542,6 @@ static int qmi_disable(struct connman_device *device)
 	}
 
 	qmi->device_enabled = FALSE;
-	/*
-	 * TODO: Entfernen der Netzwerke;
-	 * 		 qmi-dbus-server runterfahren;
-	 * 		 Allokierte Bereiche wieder freigeben;
-	 */
 
 	delete_network(qmi);
 
@@ -504,79 +573,191 @@ static struct connman_technology_driver tech_driver = {
 	.remove		= tech_remove,
 };
 
-static void init_modems() {
+static void init_modem_append(DBusMessageIter *iter, void *user_data) {
 
-	GHashTableIter iter;
-	gpointer key, value;
+	struct qmi_data *qmi = (struct qmi_data *)user_data;
 
-	DBG("qmi hash %p", qmi_hash);
-	if(qmi_hash == NULL) {
+	DBG("qmi data %p messageIter %p", qmi, iter);
+
+	if((qmi == NULL) || (iter == NULL)) {
+
+		return;
+	}
+	//pthread_mutex_lock(&qmi->qmi_data_lock);
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->devpath);
+
+	//pthread_mutex_unlock(&qmi->qmi_data_lock);
+}
+
+static void init_modem_callback(DBusMessage *message, void *user_data) {
+
+	struct qmi_data *qmi = (struct qmi_data *)user_data;
+	const char *iface = NULL;
+	DBusMessageIter iter;
+
+	DBG("qmi data %p DBusmessage %p", qmi, message);
+
+	if(qmi == NULL) {
 
 		return;
 	}
 
-	g_hash_table_iter_init(&iter, qmi_hash);
+	if(dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
 
-	while(on_looping_flag) {
-
-		while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
-
-			gchar *devname = (gchar *)key;
-			struct qmi_data *qmi = (struct qmi_data *)value;
-
-			qmi->service_connected = TRUE;
-		}
-
-		sem_wait(&new_device_sem);
+		connman_error("%s", dbus_error);
+		return;
 
 	}
 
-}
+	if((dbus_message_iter_init(message, &iter) == TRUE) &&
+			(dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_INT32)) {
 
-static void shutdown_modems() {
 
+		//pthread_mutex_lock(&qmi->qmi_data_lock);
+		dbus_message_iter_get_basic(&iter, &qmi->modem.dd);
+		//pthread_mutex_unlock(&qmi->qmi_data_lock);
+	}
 
-}
+	//pthread_mutex_lock(&qmi->qmi_data_lock);
 
-static void on_handle_qmi_connect(DBusConnection *conn, void *user_data) {
+	DBG("device descriptor %d", qmi->modem.dd);
 
 	/*
-	 * Device Descriptor via D-Bus anfordern. Dabei wird automatisch das
-	 * angschlossene Gerät initialisiert, eine Netzwerkverbindung hergestellt und der
-	 * zugewiesene Device Descriptor (dd) zurückgegeben.
-	 *
-	 * Hash-Tabelle durchgehen und alle vorhandenen Geräte initialisieren. Wenn fertig
-	 * schläfen legen und auf weitere Geräte warten.
-	 * thread ini_modems anlegen
+	 * FIXME: Daten vom QMI Gerät abfragen und setzen.
+	 * Erst wenn alle benötigten DAten vorhanden sowie APN und PW gesetzt sind und
+	 * mit Netzwerk verbunden, dass Netzwerk hinzufügen.
 	 */
 
-	pthread_t init_modems_id;
+	qmi->modem_online = TRUE;
+
+	if(qmi->group)
+		g_free(qmi->group);
+	qmi->group = g_strdup("123456789_qmi");
+
+	if(qmi->provider)
+		g_free(qmi->provider);
+	qmi->provider = g_strdup("o2");
+	//pthread_mutex_unlock(&qmi->qmi_data_lock);
+
+	add_network(qmi);
+
+}
+
+static void* init_modems(gpointer user_data) {
+
+	GDBusProxy *proxy = (GDBusProxy *)user_data;
+	GHashTableIter iter;
+	gpointer key, value;
+
+	DBG("qmi hash %p", qmi_hash);
+
+	if(qmi_hash == NULL) {
+
+		return NULL;
+	}
+
+	while(qmi_service_connected) {
+
+
+		g_hash_table_iter_init(&iter, qmi_hash);
+		while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+
+			struct qmi_data *qmi = (struct qmi_data *)value;
+			//pthread_mutex_lock(&qmi->qmi_data_lock);
+
+			if(qmi->modem_online == TRUE) {
+
+				//pthread_mutex_unlock(&qmi->qmi_data_lock);
+				continue;
+			}
+			//pthread_mutex_unlock(&qmi->qmi_data_lock);
+
+			g_dbus_proxy_method_call(	proxy,
+										CTL_DEVICE_OPEN,
+										init_modem_append,
+										init_modem_callback,
+										value,
+										NULL);
+
+		}
+
+		sem_wait(&new_device_sem);
+	}
+	DBG("Thread aborted");
+
+	return NULL;
+
+}
+
+static void on_handle_qmi_connect(DBusConnection *conn, gpointer user_data) {
+
+	int err = 0;
+	GHashTableIter iter;
+	gpointer key, value;
 
 	DBG("");
 
-	pthread_create(&init_modems_id, NULL, (void *)init_modems, NULL);
 
-	pthread_join(init_modems_id, NULL);
+	dbus_client = g_dbus_client_new(connection,
+								DBUS_QMI_SERVICE,
+								DBUS_QMI_OBJECT_CTL);
+	if(dbus_client == NULL) {
+
+		connman_error("D-Bus client not created");
+		return;
+	}
+
+
+	dbus_proxy = g_dbus_proxy_new(	dbus_client,
+								DBUS_QMI_OBJECT_CTL,
+								DBUS_QMI_INTERFACE_CTL);
+
+	if(dbus_proxy == NULL) {
+
+		connman_error("D-Bus proxy not created");
+		g_dbus_client_unref(dbus_client);
+		return;
+	}
+
+
+	qmi_service_connected = TRUE;
+	err = pthread_create(&init_modems_id, NULL, &init_modems, dbus_proxy);
+	if(err < 0) {
+
+		connman_error("Thread not created");
+		return;
+	}
+	DBG("Thread started");
 
 }
 
-static void on_handle_qmi_disconnect(DBusConnection *conn, void *user_data) {
+static void on_handle_qmi_disconnect(DBusConnection *conn, gpointer user_data) {
 
-	/*
-	 * FIXME: Disconnect wird aufgerufen, wenn der qmi-dbus-server beendet wird.
-	 * Alle Netze entfernen. thread init_modem beenden
-	 */
+	GHashTableIter iter;
+	gpointer key, value;
 
 	DBG("");
 
+	qmi_service_connected = FALSE;
+	g_dbus_proxy_unref(dbus_proxy);
+	g_dbus_client_unref(dbus_client);
 
+	g_hash_table_iter_init(&iter, qmi_hash);
+	while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 
+		struct qmi_data *qmi = (struct qmi_data *)value;
+		qmi->modem_online = FALSE;
+		delete_network(qmi);
+
+	}
+
+	sem_post(&new_device_sem);
 }
 
 
-
-static gint watch = 0;
-//static gint watch_id = 0;
+static gint watch_service = 0;
 
 static int qmi_init(void)
 {
@@ -591,7 +772,7 @@ static int qmi_init(void)
 		return -errno;
 	}
 
-	qmi_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+	qmi_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, free_hash_values);
 	if(qmi_hash == NULL) {
 
 		connman_error("Hash table could not be created.");
@@ -605,27 +786,21 @@ static int qmi_init(void)
 		return -EIO;
 	}
 
-	watch = g_dbus_add_service_watch(	connection,
-										QMI_SERVICE, on_handle_qmi_connect,
-										on_handle_qmi_disconnect, NULL, NULL);
+	watch_service = g_dbus_add_service_watch(	connection,
+												DBUS_QMI_SERVICE,
+												on_handle_qmi_connect,
+												on_handle_qmi_disconnect,
+												NULL, NULL);
 
-//	watch_id = g_dbus_add_signal_watch(	connection, QMI_SERVICE,
-//										NULL, QMI_MANAGER_INTERFACE,
-//										member,
-//										function,
-//										NULL, NULL);
-
-
-
-	if (watch == 0) {
+	if(watch_service == 0) {
 
 		err = -EIO;
 	}
 
-	if (err == -EIO) {
+	if(err == -EIO) {
 
 		connman_error("Adding service or signal watch");
-		g_dbus_remove_watch(connection, watch);
+		g_dbus_remove_watch(connection, watch_service);
 		dbus_connection_unref(connection);
 
 		return -EIO;
@@ -634,14 +809,14 @@ static int qmi_init(void)
 
 
 	err = connman_network_driver_register(&network_driver);
-	if (err < 0) {
+	if(err < 0) {
 
 		connman_error("Register network driver");
 		return err;
 	}
 
 	err = connman_device_driver_register(&qmi_driver);
-	if (err < 0) {
+	if(err < 0) {
 
 		connman_error("Register device driver");
 		connman_network_driver_unregister(&network_driver);
@@ -649,7 +824,7 @@ static int qmi_init(void)
 	}
 
 	err = connman_technology_driver_register(&tech_driver);
-	if (err < 0) {
+	if(err < 0) {
 
 		connman_error("Register technology driver");
 		connman_network_driver_unregister(&network_driver);
@@ -662,22 +837,32 @@ static int qmi_init(void)
 
 static void qmi_exit(void)
 {
+	GHashTableIter iter;
+	gpointer key, value;
 
 	DBG("");
 
-	connman_device_driver_unregister(&qmi_driver);
-	connman_network_driver_unregister(&network_driver);
-	connman_technology_driver_register(&tech_driver);
-	g_dbus_remove_watch(connection, watch);
-	dbus_connection_unref(connection);
-
+	qmi_service_connected = FALSE;
 	if(qmi_hash) {
 
+		g_hash_table_foreach(qmi_hash, shutdown_modem, NULL);
 		g_hash_table_destroy(qmi_hash);
 		qmi_hash = NULL;
 	}
 
+	sem_post(&new_device_sem);
 	sem_destroy(&new_device_sem);
+
+	connman_device_driver_unregister(&qmi_driver);
+	connman_network_driver_unregister(&network_driver);
+	connman_technology_driver_register(&tech_driver);
+
+	g_dbus_remove_watch(connection, watch_service);
+	g_dbus_proxy_unref(dbus_proxy);
+	g_dbus_client_unref(dbus_client);
+
+	dbus_connection_unref(connection);
+
 
 }
 
