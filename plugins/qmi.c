@@ -87,10 +87,7 @@ struct qmi_data {
 	guint8 strength;
 	gint32 rsrq;
 	GDBusProxy *qmi_proxy_device;
-	connman_bool_t device_enabled;
-	connman_bool_t service_connected;
 	connman_bool_t modem_opened;
-	connman_bool_t modem_online;
 	connman_bool_t modem_connected;
 	struct connman_device *device;
 	struct connman_network *network;
@@ -124,7 +121,7 @@ static void delete_network(struct qmi_data *qmi)
 {
 	g_return_if_fail(qmi);
 
-	DBG("%s", qmi->devpath);
+	DBG("Network %p", qmi->network);
 
 	if(qmi->network == NULL)
 		return;
@@ -153,8 +150,7 @@ static void add_network(struct qmi_data *qmi)
 		return;
 	}
 
-	network = connman_network_create(qmi->devpath,
-					CONNMAN_NETWORK_TYPE_CELLULAR);
+	network = connman_network_create(qmi->devpath, CONNMAN_NETWORK_TYPE_CELLULAR);
 	if(network == NULL) {
 
 		connman_error("Network could not be created.");
@@ -167,7 +163,7 @@ static void add_network(struct qmi_data *qmi)
 		g_free(qmi->provider);
 
 	if((qmi->mnc) && (qmi->mcc))
-		qmi->provider = g_strdup_printf("%s-%s", qmi->mcc, qmi->mnc);
+		qmi->provider = g_strdup_printf("%s-%s", qmi->mnc, qmi->mcc);
 	else
 		qmi->provider = g_strdup("no-clue");
 
@@ -178,11 +174,6 @@ static void add_network(struct qmi_data *qmi)
 	connman_network_set_strength(network, qmi->strength);
 	connman_network_set_group(network, qmi->group);
 
-	/*
-	 * TODO:
-	 * connman_network_update(connman_network);
-	 *
-	 */
 
 	if (connman_device_add_network(qmi->device, network) < 0) {
 
@@ -250,8 +241,6 @@ static void network_remove(struct connman_network *network)
 	}
 
 	DBG("network %p data %p", network, qmi);
-	qmi->modem_opened = FALSE;
-	DBG("Modem opened %d", qmi->modem_opened);
 
 	delete_network(qmi);
 }
@@ -275,12 +264,14 @@ network_connect_callback(DBusMessage *message, void *user_data) {
 	else {
 
 		qmi->modem_connected = TRUE;
+
 	}
 
 	connman_network_set_connected(qmi->network, qmi->modem_connected);
 
 	DBG("Device %s connected %d", qmi->devpath, qmi->modem_connected);
 
+	g_assert(qmi->qmi_proxy_device);
 	g_dbus_proxy_method_call(	qmi->qmi_proxy_device,
 								GET_PROPERTIES,
 								NULL,
@@ -299,14 +290,13 @@ network_connect_append(DBusMessageIter *iter, void *user_data) {
 
 	g_return_if_fail(qmi);
 
-	pthread_mutex_lock(&qmi->qmi_data_lock);
+
 	DBG("Device path %s object path %s", qmi->devpath, qmi->object_path);
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->username);
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->passphrase);
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->apn);
 
-	pthread_mutex_unlock(&qmi->qmi_data_lock);
 }
 
 static int network_connect(struct connman_network *network)
@@ -335,6 +325,56 @@ static int network_connect(struct connman_network *network)
 	return 0;
 }
 
+static void close_modem_callback(DBusMessage *message, void *user_data) {
+
+	DBG("DBusmessage %p", message);
+
+
+	if(dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		connman_error("%s", dbus_error);
+		return;
+
+	}
+
+}
+
+static void close_modem_append(DBusMessageIter *iter, void *user_data) {
+
+	struct qmi_data *qmi = (struct qmi_data *)user_data;
+
+	DBG("qmi data %p messageIter %p", qmi, iter);
+
+	g_return_if_fail(qmi);
+
+	DBG("Device path %s", qmi->devpath);
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->devpath);
+
+}
+
+static void close_modem(gpointer key, gpointer value, gpointer user_data) {
+
+	struct qmi_data *qmi = (struct qmi_data *)value;
+
+	DBG("QMI data %p", qmi);
+
+	g_return_if_fail(qmi);
+
+	if(qmi_service_connected == FALSE)
+		return;
+
+	g_dbus_proxy_method_call(	qmi_proxy_manager,
+								CLOSE_DEVICE,
+								close_modem_append,
+								close_modem_callback,
+								qmi,
+								NULL);
+
+
+}
+
 static void
 network_disconnect_callback(DBusMessage *message, void *user_data) {
 
@@ -352,7 +392,6 @@ network_disconnect_callback(DBusMessage *message, void *user_data) {
 	}
 
 	qmi->modem_connected = FALSE;
-	connman_network_set_connected(qmi->network, qmi->modem_connected);
 
 	DBG("Device %s connected %d", qmi->devpath, qmi->modem_connected);
 
@@ -372,6 +411,8 @@ static int network_disconnect(struct connman_network *network)
 	}
 
 	DBG("Network %p %p", network, qmi);
+
+	g_assert(qmi->qmi_proxy_device);
 
 	g_dbus_proxy_method_call(	qmi->qmi_proxy_device,
 								DISCONNECT_DEVICE,
@@ -474,9 +515,8 @@ static int qmi_probe(struct connman_device *device)
 	pthread_mutex_lock(&qmi->qmi_data_lock);
 	qmi->device = connman_device_ref(device);
 	qmi->network = NULL;
-	qmi->device_enabled = FALSE;
-	qmi->service_connected = FALSE;
-	qmi->modem_online = FALSE;
+	qmi->qmi_proxy_device = NULL;
+
 	qmi->modem_connected = FALSE;
 	qmi->modem_opened = FALSE;
 
@@ -516,53 +556,6 @@ static int qmi_probe(struct connman_device *device)
 	return 0;
 }
 
-static void shutdown_modem_callback(DBusMessage *message, void *user_data) {
-
-	DBG("DBusmessage %p", message);
-
-
-	if(dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
-		const char *dbus_error = dbus_message_get_error_name(message);
-
-		connman_error("%s", dbus_error);
-		return;
-
-	}
-
-}
-
-static void shutdown_modem_append(DBusMessageIter *iter, void *user_data) {
-
-	struct qmi_data *qmi = (struct qmi_data *)user_data;
-
-	DBG("qmi data %p messageIter %p", qmi, iter);
-
-	g_return_if_fail(qmi);
-
-	DBG("Device path %s", qmi->devpath);
-
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->devpath);
-
-}
-
-static void shutdown_modem(struct qmi_data *qmi) {
-
-	DBG("QMI data %p", qmi);
-
-	g_return_if_fail(qmi);
-
-	if(qmi_service_connected == FALSE)
-		return;
-
-	g_dbus_proxy_method_call(	qmi_proxy_manager,
-								CLOSE_DEVICE,
-								shutdown_modem_append,
-								shutdown_modem_callback,
-								qmi,
-								NULL);
-
-
-}
 
 static void qmi_remove(struct connman_device *device)
 {
@@ -578,14 +571,6 @@ static void qmi_remove(struct connman_device *device)
 		connman_error("Could not get device data");
 		return;
 	}
-
-	DBG("device %p data %p", device, qmi);
-	delete_network(qmi);
-	shutdown_modem(qmi);
-	connman_device_set_data(device, NULL);
-	connman_device_unref(qmi->device);
-
-	g_hash_table_remove(qmi_hash, qmi->devpath);
 
 }
 
@@ -614,9 +599,7 @@ static int qmi_enable(struct connman_device *device)
 		return err;
 	}
 
-	qmi->device_enabled = TRUE;
-
-	if(qmi->modem_online == TRUE) {
+	if(qmi->modem_opened == TRUE) {
 
 		add_network(qmi);
 	}
@@ -648,8 +631,6 @@ static int qmi_disable(struct connman_device *device)
 		connman_error("QMI device could not getting down with ifdown");
 		return err;
 	}
-
-	qmi->device_enabled = FALSE;
 
 	delete_network(qmi);
 
@@ -688,6 +669,9 @@ calculate_signal_strength(gint32 rsrq) {
 
 	guint8 strength;
 	// 100/ dRSRQ = 100/ 17 = 5,882352941
+	if(rsrq == 0)
+		return 0;
+
 	strength = (rsrq + 20) * 5,882352941;
 	if(strength > 100)
 		strength = 100;
@@ -704,13 +688,18 @@ static gboolean
 update_network(struct qmi_data *qmi, DBusMessageIter *entry_iter) {
 
 	DBusMessageIter variant_iter;
+	gboolean updating_strength = FALSE;
+	gboolean updating_others = FALSE;
 	gchar *key;
 	gchar *help;
+
+
 
 	if(dbus_message_iter_get_arg_type(entry_iter) != DBUS_TYPE_STRING)
 		return FALSE;
 
 	dbus_message_iter_get_basic(entry_iter, &key);
+	DBG("Property %s", key);
 	if(key != NULL) {
 
 		dbus_message_iter_next(entry_iter);
@@ -729,33 +718,57 @@ update_network(struct qmi_data *qmi, DBusMessageIter *entry_iter) {
 			if(qmi->imsi)
 				g_free(qmi->imsi);
 			qmi->imsi = g_strdup(help);
-			return TRUE;
+
 		}
 		else if(g_strcmp0(key, "RSRQ") == 0) {
 			/* RSRQ */
+			guint8 help = 0;
+
+			if(qmi->network == NULL)
+				return FALSE;
+
 			if(dbus_message_iter_get_arg_type(&variant_iter) != DBUS_TYPE_INT32)
 				return FALSE;
 
 			dbus_message_iter_get_basic(&variant_iter, &qmi->rsrq);
-			qmi->strength = calculate_signal_strength(qmi->rsrq);
-			if(qmi->network) {
+			help = calculate_signal_strength(qmi->rsrq);
+			if(help != qmi->strength) {
 
+				qmi->strength = help;
 				connman_network_set_strength(qmi->network, qmi->strength);
-				connman_network_update(qmi->network);
+
+				updating_strength = TRUE;
 			}
 
-			return TRUE;
+
 		}
 		else if(g_strcmp0(key, "PacketStatus") == 0) {
 			/* Packet status */
+			if(qmi->network == NULL)
+				return FALSE;
+
 			if(dbus_message_iter_get_arg_type(&variant_iter) != DBUS_TYPE_STRING)
 				return FALSE;
 
 			dbus_message_iter_get_basic(&variant_iter, &help);
-			if(qmi->packet_status)
-				g_free(qmi->packet_status);
-			qmi->packet_status = g_strdup(help);
-			return TRUE;
+			if(g_strcmp0(qmi->packet_status, help) != 0) {
+
+				if(qmi->packet_status)
+					g_free(qmi->packet_status);
+				qmi->packet_status = g_strdup(help);
+
+				if(g_strcmp0(qmi->packet_status, "connected") == 0) {
+
+					connman_network_set_connected(qmi->network, TRUE);
+				}
+				else {
+
+					connman_network_set_connected(qmi->network, FALSE);
+				}
+
+			}
+
+
 		}
 		else if(g_strcmp0(key, "NetworkType") == 0) {
 			/* Network type */
@@ -763,10 +776,17 @@ update_network(struct qmi_data *qmi, DBusMessageIter *entry_iter) {
 				return FALSE;
 
 			dbus_message_iter_get_basic(&variant_iter, &help);
-			if(qmi->network_type)
-				g_free(qmi->network_type);
-			qmi->network_type = g_strdup(help);
-			return TRUE;
+			if(g_strcmp0(qmi->network_type, help) != 0) {
+
+				if(qmi->network_type)
+					g_free(qmi->network_type);
+				qmi->network_type = g_strdup(help);
+
+				updating_others = TRUE;
+
+			}
+
+
 		}
 		else if(g_strcmp0(key, "MCC") == 0) {
 			/* MCC */
@@ -774,10 +794,17 @@ update_network(struct qmi_data *qmi, DBusMessageIter *entry_iter) {
 				return FALSE;
 
 			dbus_message_iter_get_basic(&variant_iter, &help);
-			if(qmi->mcc)
-				g_free(qmi->mcc);
-			qmi->mcc = g_strdup(help);
-			return TRUE;
+			if(g_strcmp0(qmi->mcc, help) != 0) {
+
+				if(qmi->mcc)
+					g_free(qmi->mcc);
+				qmi->mcc = g_strdup(help);
+
+				updating_others = TRUE;
+
+			}
+
+
 		}
 		else if(g_strcmp0(key, "MNC") == 0) {
 			/* MNC */
@@ -785,10 +812,17 @@ update_network(struct qmi_data *qmi, DBusMessageIter *entry_iter) {
 				return FALSE;
 
 			dbus_message_iter_get_basic(&variant_iter, &help);
-			if(qmi->mnc)
-				g_free(qmi->mnc);
-			qmi->mnc = g_strdup(help);
-			return TRUE;
+			if(g_strcmp0(qmi->mnc, help) != 0) {
+
+				if(qmi->mnc)
+					g_free(qmi->mnc);
+				qmi->mnc = g_strdup(help);
+
+				updating_others = TRUE;
+
+			}
+
+
 		}
 		else if(g_strcmp0(key, "RAT") == 0) {
 			/* RAT */
@@ -796,11 +830,39 @@ update_network(struct qmi_data *qmi, DBusMessageIter *entry_iter) {
 				return FALSE;
 
 			dbus_message_iter_get_basic(&variant_iter, &help);
-			if(qmi->rat)
-				g_free(qmi->rat);
-			qmi->rat = g_strdup(help);
-			return TRUE;
+			if(g_strcmp0(qmi->rat, help) != 0) {
+
+				if(qmi->rat)
+					g_free(qmi->rat);
+				qmi->rat = g_strdup(help);
+
+				updating_others = TRUE;
+
+			}
+
+
 		}
+
+		if(qmi->network) {
+
+			if(updating_strength == TRUE) {
+
+				connman_network_update(qmi->network);
+			}
+			else if(updating_others == TRUE) {
+
+				if(qmi->provider)
+					g_free(qmi->provider);
+
+				qmi->provider = g_strdup_printf("%s-%s-%s", qmi->mnc, qmi->mcc, qmi->rat);
+
+				connman_network_set_name(qmi->network, qmi->provider);
+				connman_network_update(qmi->network);
+
+			}
+
+		}
+
 
 	}
 
@@ -835,16 +897,6 @@ set_reply_to_qmi_data(DBusMessageIter *main_iter, struct qmi_data *qmi) {
 		dbus_message_iter_next(&dict);
 	}
 
-	if(qmi->network) {
-
-		if((qmi->mnc) && (qmi->mcc))
-			qmi->provider = g_strdup_printf("%s-%s", qmi->mcc, qmi->mnc);
-		else
-			qmi->provider = g_strdup("no-clue");
-
-		connman_network_set_name(qmi->network, qmi->provider);
-		connman_network_update(qmi->network);
-	}
 
 	return TRUE;
 }
@@ -928,7 +980,7 @@ open_modem_get_properties_callback(DBusMessage *message, void *user_data) {
 		return;
 	}
 
-	qmi->modem_opened = TRUE;
+
 	DBG("Modem opened %d", qmi->modem_opened);
 
 	DBG("IMSI %s", qmi->imsi);
@@ -936,6 +988,8 @@ open_modem_get_properties_callback(DBusMessage *message, void *user_data) {
 	if(qmi->group)
 		g_free(qmi->group);
 	qmi->group = g_strdup_printf("%s_qmi", qmi->imsi);
+
+	qmi->modem_opened = TRUE;
 
 	add_network(qmi);
 
@@ -980,9 +1034,12 @@ open_modem_callback(DBusMessage *message, void *user_data) {
 
 	DBG("Modem opened object path %s", qmi->object_path);
 
-	qmi->qmi_proxy_device = g_dbus_proxy_new(	qmi_client,
+	if(!qmi->qmi_proxy_device) {
+
+		qmi->qmi_proxy_device = g_dbus_proxy_new(	qmi_client,
 												qmi->object_path,
 												QMI_DEVICE_INTERFACE);
+	}
 
 	if(qmi->qmi_proxy_device == NULL) {
 
@@ -1011,6 +1068,7 @@ open_modem_append(DBusMessageIter *iter, void *user_data) {
 		return;
 	}
 	pthread_mutex_lock(&qmi->qmi_data_lock);
+
 	DBG("Device path %s", qmi->devpath);
 
 	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->devpath);
@@ -1070,28 +1128,6 @@ static void on_handle_qmi_connect(DBusConnection *conn, gpointer user_data) {
 
 	DBG("");
 
-
-	qmi_client = g_dbus_client_new(connection,
-									QMI_SERVICE,
-									QMI_PATH);
-	if(qmi_client == NULL) {
-
-		connman_error("D-Bus client not created");
-		return;
-	}
-
-
-	qmi_proxy_manager = g_dbus_proxy_new(	qmi_client,
-											QMI_MANAGER_PATH,
-											QMI_MANAGER_INTERFACE);
-
-	if(qmi_proxy_manager == NULL) {
-
-		connman_error("QMI proxy manager not created");
-		g_dbus_client_unref(qmi_client);
-		return;
-	}
-
 	qmi_service_connected = TRUE;
 	err = pthread_create(&init_modems_id, NULL, &init_modems_thread, qmi_proxy_manager);
 	if(err < 0) {
@@ -1111,14 +1147,14 @@ static void on_handle_qmi_disconnect(DBusConnection *conn, gpointer user_data) {
 	DBG("");
 
 	qmi_service_connected = FALSE;
-	g_dbus_proxy_unref(qmi_proxy_manager);
-	g_dbus_client_unref(qmi_client);
 
 	g_hash_table_iter_init(&iter, qmi_hash);
 	while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 
 		struct qmi_data *qmi = (struct qmi_data *)value;
-		qmi->modem_online = FALSE;
+		connman_network_set_connected(qmi->network, FALSE);
+		qmi->modem_opened = FALSE;
+		qmi->modem_connected = FALSE;
 		delete_network(qmi);
 
 	}
@@ -1178,9 +1214,9 @@ on_handle_property_changed(DBusConnection *conn, DBusMessage *message,	void *use
 		}
 	}
 
-	g_return_val_if_fail(qmi, FALSE);
+	g_assert(qmi);
 
-	update_network(qmi,&message_iter);
+	update_network(qmi, &message_iter);
 
 
 	return TRUE;
@@ -1239,9 +1275,9 @@ on_handle_state_changed(DBusConnection *conn, DBusMessage *message,	void *user_d
 		}
 	}
 
-	g_return_val_if_fail(qmi, FALSE);
+	g_assert(qmi);
 
-	update_network(qmi,&message_iter);
+	update_network(qmi, &message_iter);
 
 
 	return TRUE;
@@ -1299,9 +1335,9 @@ on_handle_technology_changed(DBusConnection *conn, DBusMessage *message, void *u
 		}
 	}
 
-	g_return_val_if_fail(qmi, FALSE);
+	g_assert(qmi);
 
-	update_network(qmi,&message_iter);
+	update_network(qmi, &message_iter);
 
 
 	return TRUE;
@@ -1340,6 +1376,28 @@ static int qmi_init(void)
 		connman_error("D-Bus connection failed");
 		return -EIO;
 	}
+
+	qmi_client = g_dbus_client_new(	connection,
+									QMI_SERVICE,
+									QMI_PATH);
+	if(qmi_client == NULL) {
+
+		connman_error("D-Bus client not created");
+		return -EIO;
+	}
+
+
+	qmi_proxy_manager = g_dbus_proxy_new(	qmi_client,
+											QMI_MANAGER_PATH,
+											QMI_MANAGER_INTERFACE);
+
+	if(qmi_proxy_manager == NULL) {
+
+		connman_error("QMI proxy manager not created");
+		g_dbus_client_unref(qmi_client);
+		return -EIO;
+	}
+
 
 	watch_service = g_dbus_add_service_watch(	connection,
 												QMI_SERVICE,
@@ -1412,26 +1470,39 @@ static void qmi_exit(void)
 
 	DBG("");
 
-	qmi_service_connected = FALSE;
+
 	if(qmi_hash) {
 
-		g_hash_table_foreach(qmi_hash, shutdown_modem, NULL);
-		g_hash_table_destroy(qmi_hash);
-		qmi_hash = NULL;
+		g_hash_table_foreach(qmi_hash, close_modem, NULL);
+
 	}
 
-	sem_post(&new_device_sem);
-	sem_destroy(&new_device_sem);
+	qmi_service_connected = FALSE;
 
 	connman_device_driver_unregister(&qmi_driver);
 	connman_network_driver_unregister(&network_driver);
 	connman_technology_driver_register(&tech_driver);
 
 	g_dbus_remove_watch(connection, watch_service);
+	g_dbus_remove_watch(connection, watch_property_changed);
+	g_dbus_remove_watch(connection, watch_state_changed);
+	g_dbus_remove_watch(connection, watch_technology_changed);
+
 	g_dbus_proxy_unref(qmi_proxy_manager);
 	g_dbus_client_unref(qmi_client);
 
 	dbus_connection_unref(connection);
+
+	sem_post(&new_device_sem);
+	sem_destroy(&new_device_sem);
+
+	if(qmi_hash) {
+
+		g_hash_table_destroy(qmi_hash);
+		qmi_hash = NULL;
+	}
+
+
 
 
 }
