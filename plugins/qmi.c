@@ -258,15 +258,16 @@ network_connect_callback(DBusMessage *message, void *user_data) {
 		const char *dbus_error = dbus_message_get_error_name(message);
 
 		qmi->modem_connected = FALSE;
+		if(qmi->network)
+			connman_network_set_connected(qmi->network, qmi->modem_connected);
+
 		connman_error("%s", dbus_error);
 
-	}
-	else {
-
-		qmi->modem_connected = TRUE;
+		return;
 
 	}
 
+	qmi->modem_connected = TRUE;
 	connman_network_set_connected(qmi->network, qmi->modem_connected);
 
 	DBG("Device %s connected %d", qmi->devpath, qmi->modem_connected);
@@ -278,6 +279,7 @@ network_connect_callback(DBusMessage *message, void *user_data) {
 								get_properties_callback,
 								qmi,
 								NULL);
+
 
 }
 
@@ -676,10 +678,7 @@ calculate_signal_strength(gint32 rsrq) {
 	if(strength > 100)
 		strength = 100;
 
-	if(strength < 0)
-		strength = 0;
-
-	DBG("Signal strength %d", strength);
+	DBG("Signal strength %u RSRQ %d", strength, rsrq);
 
 	return strength;
 }
@@ -1082,6 +1081,7 @@ init_modems_thread(gpointer user_data) {
 	GDBusProxy *proxy = (GDBusProxy *)user_data;
 	GHashTableIter iter;
 	gpointer key, value;
+	guint i;
 
 	DBG("qmi hash %p", qmi_hash);
 
@@ -1092,7 +1092,7 @@ init_modems_thread(gpointer user_data) {
 
 	while(qmi_service_connected) {
 
-
+		i = 0;
 		g_hash_table_iter_init(&iter, qmi_hash);
 		while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 
@@ -1103,13 +1103,22 @@ init_modems_thread(gpointer user_data) {
 				continue;
 			}
 
+			/*
+			 * FIXME: Gefahr von Endlosschleifen, wenn modem_opened nicht auf TRUE gesetzt wird.
+			 *
+			 */
+			DBG("Trying to open device %s", qmi->devpath);
 			g_dbus_proxy_method_call(	qmi_proxy_manager,
 										OPEN_DEVICE,
 										open_modem_append,
 										open_modem_callback,
 										value,
 										NULL);
+			i++;
+			if(i>10) {
 
+				break;
+			}
 		}
 
 		sem_wait(&new_device_sem);
@@ -1152,7 +1161,8 @@ static void on_handle_qmi_disconnect(DBusConnection *conn, gpointer user_data) {
 	while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 
 		struct qmi_data *qmi = (struct qmi_data *)value;
-		connman_network_set_connected(qmi->network, FALSE);
+		if(qmi->network)
+			connman_network_set_connected(qmi->network, FALSE);
 		qmi->modem_opened = FALSE;
 		qmi->modem_connected = FALSE;
 		delete_network(qmi);
