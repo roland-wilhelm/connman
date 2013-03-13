@@ -87,6 +87,7 @@ struct qmi_data {
 	guint8 strength;
 	gint32 rsrq;
 	GDBusProxy *qmi_proxy_device;
+	connman_bool_t modem_opening;
 	connman_bool_t modem_opened;
 	connman_bool_t modem_connected;
 	struct connman_device *device;
@@ -518,7 +519,7 @@ static int qmi_probe(struct connman_device *device)
 	qmi->device = connman_device_ref(device);
 	qmi->network = NULL;
 	qmi->qmi_proxy_device = NULL;
-
+	qmi->modem_opening = FALSE;
 	qmi->modem_connected = FALSE;
 	qmi->modem_opened = FALSE;
 
@@ -952,7 +953,7 @@ open_modem_get_properties_callback(DBusMessage *message, void *user_data) {
 	if(dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
 
 		const char *dbus_error = dbus_message_get_error_name(message);
-
+		qmi->modem_opening = FALSE;
 		connman_error("%s", dbus_error);
 		return;
 
@@ -961,14 +962,14 @@ open_modem_get_properties_callback(DBusMessage *message, void *user_data) {
 	if(dbus_message_iter_init(message, &iter) == FALSE) {
 
 		connman_error("Failure init ITER");
-
+		qmi->modem_opening = FALSE;
 		return;
 	}
 
 	if(dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_INVALID) {
 
 		connman_error("Invalid D-Bus type");
-
+		qmi->modem_opening = FALSE;
 		return;
 	}
 
@@ -989,6 +990,7 @@ open_modem_get_properties_callback(DBusMessage *message, void *user_data) {
 	qmi->group = g_strdup_printf("%s_qmi", qmi->imsi);
 
 	qmi->modem_opened = TRUE;
+	qmi->modem_opening = FALSE;
 
 	add_network(qmi);
 
@@ -1007,6 +1009,7 @@ open_modem_callback(DBusMessage *message, void *user_data) {
 	if(qmi == NULL) {
 
 		connman_error("No QMI device");
+		qmi->modem_opening = FALSE;
 		return;
 	}
 
@@ -1014,6 +1017,7 @@ open_modem_callback(DBusMessage *message, void *user_data) {
 		const char *dbus_error = dbus_message_get_error_name(message);
 
 		connman_error("%s", dbus_error);
+		qmi->modem_opening = FALSE;
 		return;
 
 	}
@@ -1027,7 +1031,7 @@ open_modem_callback(DBusMessage *message, void *user_data) {
 	else {
 
 		connman_error("Return type invalid");
-
+		qmi->modem_opening = FALSE;
 		return;
 	}
 
@@ -1064,6 +1068,7 @@ open_modem_append(DBusMessageIter *iter, void *user_data) {
 
 	if((qmi == NULL) || (iter == NULL)) {
 
+		qmi->modem_opening = FALSE;
 		return;
 	}
 	pthread_mutex_lock(&qmi->qmi_data_lock);
@@ -1081,7 +1086,7 @@ init_modems_thread(gpointer user_data) {
 	GDBusProxy *proxy = (GDBusProxy *)user_data;
 	GHashTableIter iter;
 	gpointer key, value;
-	guint i;
+
 
 	DBG("qmi hash %p", qmi_hash);
 
@@ -1092,13 +1097,13 @@ init_modems_thread(gpointer user_data) {
 
 	while(qmi_service_connected) {
 
-		i = 0;
+
 		g_hash_table_iter_init(&iter, qmi_hash);
 		while(g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
 
 			struct qmi_data *qmi = (struct qmi_data *)value;
 
-			if(qmi->modem_opened == TRUE) {
+			if((qmi->modem_opened == TRUE) || (qmi->modem_opening == TRUE)) {
 
 				continue;
 			}
@@ -1108,17 +1113,14 @@ init_modems_thread(gpointer user_data) {
 			 *
 			 */
 			DBG("Trying to open device %s", qmi->devpath);
+			qmi->modem_opening = TRUE;
 			g_dbus_proxy_method_call(	qmi_proxy_manager,
 										OPEN_DEVICE,
 										open_modem_append,
 										open_modem_callback,
 										value,
 										NULL);
-			i++;
-			if(i>10) {
 
-				break;
-			}
 		}
 
 		sem_wait(&new_device_sem);
@@ -1164,6 +1166,7 @@ static void on_handle_qmi_disconnect(DBusConnection *conn, gpointer user_data) {
 		if(qmi->network)
 			connman_network_set_connected(qmi->network, FALSE);
 		qmi->modem_opened = FALSE;
+		qmi->modem_opening = FALSE;
 		qmi->modem_connected = FALSE;
 		delete_network(qmi);
 
