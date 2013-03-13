@@ -42,6 +42,7 @@ struct connman_config_service {
 	char *apn;
 	char *imsi;
 	char *sim_nr;
+	char *username;
 	unsigned int ssid_len;
 	char *eap;
 	char *identity;
@@ -93,6 +94,7 @@ static connman_bool_t cleanup = FALSE;
 #define SERVICE_KEY_IDENTITY           "Identity"
 #define SERVICE_KEY_PHASE2             "Phase2"
 #define SERVICE_KEY_PASSPHRASE         "Passphrase"
+#define SERVICE_KEY_USERNAME		   "Username"
 #define SERVICE_KEY_HIDDEN             "Hidden"
 
 static const char *config_possible_keys[] = {
@@ -116,6 +118,9 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_IDENTITY,
 	SERVICE_KEY_PHASE2,
 	SERVICE_KEY_PASSPHRASE,
+	SERVICE_KEY_IMSI,
+	SERVICE_KEY_USERNAME,
+	SERVICE_KEY_SIM,
 	SERVICE_KEY_HIDDEN,
 	NULL,
 };
@@ -173,6 +178,7 @@ free_only:
 	g_free(config_service->apn);
 	g_free(config_service->sim_nr);
 	g_free(config_service->imsi);
+	g_free(config_service->username);
 	g_free(config_service->eap);
 	g_free(config_service->identity);
 	g_free(config_service->ca_cert_file);
@@ -300,6 +306,12 @@ static int load_service(GKeyFile *keyfile, const char *group,
 	if (str != NULL) {
 		g_free(service->imsi);
 		service->imsi = str;
+	}
+
+	str = g_key_file_get_string(keyfile, group, SERVICE_KEY_USERNAME, NULL);
+	if (str != NULL) {
+		g_free(service->username);
+		service->username = str;
 	}
 
 	hex_ssid = g_key_file_get_string(keyfile, group, SERVICE_KEY_SSID,
@@ -437,6 +449,7 @@ err:
 		g_free(service->name);
 		g_free(service->ssid);
 		g_free(service->apn);
+		g_free(service->username);
 		g_free(service->sim_nr);
 		g_free(service->imsi);
 		g_free(service);
@@ -695,7 +708,7 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 	unsigned int ssid_len;
 
 	if((g_strcmp0(config->type, "wifi") != 0) &&
-			(g_strcmp0(config->type, "cellular") != 0)) {
+			(g_strcmp0(config->type, "qmi") != 0)) {
 
 		return;
 	}
@@ -722,12 +735,12 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 
 			}
 
-			if((g_strcmp0(config->type, "cellular") == 0)) {
+			if((g_strcmp0(config->type, "qmi") == 0)) {
 
 				const char *group = NULL, *imsi = NULL;
 				GString *str;
 
-				if(connman_network_get_type(network) != CONNMAN_NETWORK_TYPE_CELLULAR)
+				if(connman_network_get_type(network) != CONNMAN_NETWORK_TYPE_QMI)
 					return;
 
 				group = connman_network_get_group(network);
@@ -737,13 +750,13 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 					return;
 				}
 
-				if(g_str_has_suffix(group, "_qmi") == FALSE) {
+				if(g_str_has_suffix(group, "_none") == FALSE) {
 
 					connman_error("Network IMSI not valid");
 					return;
 				}
 
-				imsi = g_strrstr(group, "_qmi");
+				imsi = g_strrstr(group, "_none");
 				if(imsi == NULL) {
 
 					connman_error("Network IMSI not valid");
@@ -837,6 +850,9 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 			if (config->imsi != NULL)
 					__connman_service_set_string(service, "IMSI", config->imsi);
 
+			if (config->username != NULL)
+					__connman_service_set_string(service, "Username", config->username);
+
 			if (config->hidden == TRUE)
 				__connman_service_set_hidden(service);
 
@@ -857,7 +873,7 @@ int __connman_config_provision_service(struct connman_service *service)
 	type = connman_service_get_type(service);
 	switch(type) {
 
-		case CONNMAN_SERVICE_TYPE_CELLULAR:
+		case CONNMAN_SERVICE_TYPE_QMI:
 		case CONNMAN_SERVICE_TYPE_WIFI:
 
 			g_hash_table_iter_init(&iter, config_table);
@@ -888,7 +904,7 @@ int __connman_config_provision_service_ident(struct connman_service *service,
 	DBG("service %p", service);
 	type = connman_service_get_type(service);
 	if((type != CONNMAN_SERVICE_TYPE_WIFI) &&
-			(type != CONNMAN_SERVICE_TYPE_CELLULAR)) {
+			(type != CONNMAN_SERVICE_TYPE_QMI)) {
 
 		return -ENOSYS;
 	}

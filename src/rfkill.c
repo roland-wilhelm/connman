@@ -41,6 +41,7 @@ enum rfkill_type {
 	RFKILL_TYPE_WWAN,
 	RFKILL_TYPE_GPS,
 	RFKILL_TYPE_FM,
+	RFKILL_TYPE_QMI,
 	NUM_RFKILL_TYPES,
 };
 
@@ -68,6 +69,8 @@ static enum connman_service_type convert_type(uint8_t type)
 		return CONNMAN_SERVICE_TYPE_BLUETOOTH;
 	case RFKILL_TYPE_WWAN:
 		return CONNMAN_SERVICE_TYPE_CELLULAR;
+	case RFKILL_TYPE_QMI:
+		return CONNMAN_SERVICE_TYPE_QMI;
 	}
 
 	return CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -90,6 +93,8 @@ static enum rfkill_type convert_service_type(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
 		return NUM_RFKILL_TYPES;
+	case CONNMAN_SERVICE_TYPE_QMI:
+		return RFKILL_TYPE_QMI;
 	}
 
 	return NUM_RFKILL_TYPES;

@@ -132,6 +132,14 @@ static void read_uevent(struct interface_data *interface)
 		interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 	}
 
+	if(strncmp(interface->name, "qmi", 3) == 0) {
+
+		interface->service_type = CONNMAN_SERVICE_TYPE_QMI;
+		interface->device_type = CONNMAN_DEVICE_TYPE_QMI;
+
+		return;
+	}
+
 	filename = g_strdup_printf("/sys/class/net/%s/uevent",
 						interface->name);
 
@@ -159,17 +167,25 @@ static void read_uevent(struct interface_data *interface)
 		if (strcmp(line + 8, "wlan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
 			interface->device_type = CONNMAN_DEVICE_TYPE_WIFI;
-		} else if (strcmp(line + 8, "wwan") == 0) {
+		}
+		else if (strcmp(line + 8, "wwan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_CELLULAR;
 			interface->device_type = CONNMAN_DEVICE_TYPE_CELLULAR;
-		} else if (strcmp(line + 8, "bluetooth") == 0) {
+		}
+		else if (strcmp(line + 8, "bluetooth") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_BLUETOOTH;
 			interface->device_type = CONNMAN_DEVICE_TYPE_BLUETOOTH;
-		} else if (strcmp(line + 8, "gadget") == 0) {
+		}
+		else if (strcmp(line + 8, "gadget") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
 
-		} else {
+		}
+		else if (strcmp(line + 8, "qmi") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_QMI;
+			interface->device_type = CONNMAN_DEVICE_TYPE_QMI;
+		}
+		else {
 			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 			interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
 		}

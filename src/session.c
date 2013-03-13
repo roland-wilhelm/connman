@@ -203,6 +203,8 @@ static int bearer2service(const char *bearer, enum connman_service_type *type)
 		*type = CONNMAN_SERVICE_TYPE_VPN;
 	else if (g_strcmp0(bearer, "*") == 0)
 		*type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+	else if (g_strcmp0(bearer, "qmi") == 0)
+		*type = CONNMAN_SERVICE_TYPE_QMI;
 	else
 		return -EINVAL;
 
@@ -227,6 +229,8 @@ static char *service2bearer(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_GADGET:
 		return "";
+	case CONNMAN_SERVICE_TYPE_QMI:
+		return "qmi";
 	}
 
 	return "";
@@ -847,6 +851,7 @@ static int service_type_weight(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_WIFI:
 		return 2;
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_QMI:
 		return 1;
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
 	case CONNMAN_SERVICE_TYPE_SYSTEM:

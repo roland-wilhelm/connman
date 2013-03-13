@@ -151,7 +151,7 @@ static void add_network(struct qmi_data *qmi)
 		return;
 	}
 
-	network = connman_network_create(qmi->devpath, CONNMAN_NETWORK_TYPE_CELLULAR);
+	network = connman_network_create(qmi->devpath, CONNMAN_NETWORK_TYPE_QMI);
 	if(network == NULL) {
 
 		connman_error("Network could not be created.");
@@ -160,20 +160,16 @@ static void add_network(struct qmi_data *qmi)
 
 	DBG("network %p", qmi->network);
 
-	if(qmi->provider)
-		g_free(qmi->provider);
-
-	if((qmi->mnc) && (qmi->mcc))
-		qmi->provider = g_strdup_printf("%s-%s", qmi->mnc, qmi->mcc);
-	else
-		qmi->provider = g_strdup("no-clue");
-
 	index = connman_device_get_index(qmi->device);
 	connman_network_set_index(network, index);
-	connman_network_set_name(network, qmi->provider);
 	connman_network_set_data(network, qmi);
 	connman_network_set_strength(network, qmi->strength);
 	connman_network_set_group(network, qmi->group);
+
+	if(qmi->provider)
+		g_free(qmi->provider);
+	qmi->provider = g_strdup("no-name");
+	connman_network_set_name(network, qmi->provider);
 
 
 	if (connman_device_add_network(qmi->device, network) < 0) {
@@ -205,9 +201,18 @@ static void add_network(struct qmi_data *qmi)
 
 	if(qmi->username)
 		g_free(qmi->username);
-	qmi->username = g_strdup("username");
+	qmi->username = g_strdup(connman_service_get_string(service, "Username"));
 
-	DBG("network %p ISMI %s APN %s PW %s", qmi->network, qmi->imsi, qmi->apn, qmi->passphrase);
+	if(qmi->provider)
+		g_free(qmi->provider);
+	qmi->provider = g_strdup(connman_service_get_string(service, "Name"));
+	if(qmi->provider == NULL)
+		qmi->provider = g_strdup("no-name");
+
+	connman_network_update(qmi->network);
+
+
+	DBG("network %p ISMI %s APN %s PW %s Username %s", qmi->network, qmi->imsi, qmi->apn, qmi->passphrase, qmi->username);
 	connman_service_unref(service);
 	if((qmi->imsi == NULL) || (qmi->apn == NULL) || (qmi->passphrase == NULL)) {
 
@@ -428,8 +433,8 @@ static int network_disconnect(struct connman_network *network)
 }
 
 static struct connman_network_driver network_driver = {
-	.name		= "cellular",
-	.type		= CONNMAN_NETWORK_TYPE_CELLULAR,
+	.name		= "qmi",
+	.type		= CONNMAN_NETWORK_TYPE_QMI,
 	.probe		= network_probe,
 	.remove		= network_remove,
 	.connect	= network_connect,
@@ -641,8 +646,8 @@ static int qmi_disable(struct connman_device *device)
 }
 
 static struct connman_device_driver qmi_driver = {
-	.name		= "cellular",
-	.type		= CONNMAN_DEVICE_TYPE_CELLULAR,
+	.name		= "qmi",
+	.type		= CONNMAN_DEVICE_TYPE_QMI,
 	.probe		= qmi_probe,
 	.remove		= qmi_remove,
 	.enable		= qmi_enable,
@@ -659,8 +664,8 @@ static void tech_remove(struct connman_technology *technology)
 }
 
 static struct connman_technology_driver tech_driver = {
-	.name		= "cellular",
-	.type		= CONNMAN_SERVICE_TYPE_CELLULAR,
+	.name		= "qmi",
+	.type		= CONNMAN_SERVICE_TYPE_QMI,
 	.probe		= tech_probe,
 	.remove		= tech_remove,
 };
@@ -987,7 +992,7 @@ open_modem_get_properties_callback(DBusMessage *message, void *user_data) {
 
 	if(qmi->group)
 		g_free(qmi->group);
-	qmi->group = g_strdup_printf("%s_qmi", qmi->imsi);
+	qmi->group = g_strdup_printf("%s_none", qmi->imsi);
 
 	qmi->modem_opened = TRUE;
 	qmi->modem_opening = FALSE;
