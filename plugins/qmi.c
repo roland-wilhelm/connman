@@ -138,7 +138,6 @@ static void add_network(struct qmi_data *qmi)
 {
 	struct connman_network *network = NULL;
 	int index;
-	gchar *ident = NULL;
 	struct connman_service *service = NULL;
 
 	g_return_if_fail(qmi);
@@ -225,7 +224,6 @@ static void add_network(struct qmi_data *qmi)
 
 static int network_probe(struct connman_network *network)
 {
-	struct qmi_data *qmi = NULL;
 
 	DBG("network %p", network);
 
@@ -1089,7 +1087,6 @@ open_modem_append(DBusMessageIter *iter, void *user_data) {
 static void*
 init_modems_thread(gpointer user_data) {
 
-	GDBusProxy *proxy = (GDBusProxy *)user_data;
 	GHashTableIter iter;
 	gpointer key, value;
 
@@ -1140,8 +1137,6 @@ init_modems_thread(gpointer user_data) {
 static void on_handle_qmi_connect(DBusConnection *conn, gpointer user_data) {
 
 	int err = 0;
-	GHashTableIter iter;
-	gpointer key, value;
 
 	DBG("");
 
@@ -1484,8 +1479,7 @@ static int qmi_init(void)
 
 static void qmi_exit(void)
 {
-	GHashTableIter iter;
-	gpointer key, value;
+
 
 	DBG("");
 
