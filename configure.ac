@@ -320,6 +320,11 @@ AC_ARG_ENABLE(qmi, AC_HELP_STRING([--disable-qmi],
 					[enable_qmi=${enableval}])
 AM_CONDITIONAL(QMI, test "${enable_qmi}" != "no")
 
+AC_ARG_ENABLE(MK3, AC_HELP_STRING([--disable-mk3],
+				[disable Car2Car support]),
+					[enable_mk3=${enableval}])
+AM_CONDITIONAL(MK3, test "${enable_mk3}" != "no")
+
 AC_ARG_ENABLE(dundee, AC_HELP_STRING([--disable-dundee],
 				[disable dundee support (Bluetooth DUN)]),
 					[enable_dundee=${enableval}])

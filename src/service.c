@@ -87,6 +87,7 @@ struct connman_service {
 	char *sim_nr;
 	char *imsi;
 	char *username;
+	char *provider_name;
 	char *agent_passphrase;
 	connman_bool_t roaming;
 	struct connman_ipconfig *ipconfig_ipv4;
@@ -182,6 +183,8 @@ const char *__connman_service_type2string(enum connman_service_type type)
 		return "gadget";
 	case CONNMAN_SERVICE_TYPE_QMI:
 		return "qmi";
+	case CONNMAN_SERVICE_TYPE_MK3:
+		return "mk3";
 	}
 
 	return NULL;
@@ -210,6 +213,8 @@ enum connman_service_type __connman_service_string2type(const char *str)
 		return CONNMAN_SERVICE_TYPE_SYSTEM;
 	if (strcmp(str, "qmi") == 0)
 		return CONNMAN_SERVICE_TYPE_QMI;
+	if (strcmp(str, "mk3") == 0)
+		return CONNMAN_SERVICE_TYPE_MK3;
 
 	return CONNMAN_SERVICE_TYPE_UNKNOWN;
 }
@@ -404,6 +409,7 @@ static int service_load(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_QMI:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_MK3:
 		service->favorite = g_key_file_get_boolean(keyfile,
 				service->identifier, "Favorite", NULL);
 
@@ -417,6 +423,7 @@ static int service_load(struct connman_service *service)
 			g_free(str);
 		}
 		/* fall through */
+
 
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 		autoconnect = g_key_file_get_boolean(keyfile,
@@ -576,6 +583,7 @@ static int service_save(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_QMI:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_MK3:
 		g_key_file_set_boolean(keyfile, service->identifier,
 					"Favorite", service->favorite);
 
@@ -591,6 +599,7 @@ static int service_save(struct connman_service *service)
 							"Failure", NULL);
 		}
 		/* fall through */
+
 
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 		if (service->favorite == TRUE)
@@ -2237,6 +2246,7 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 						append_ethernet, service);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 		connman_dbus_dict_append_dict(dict, "Ethernet",
@@ -4465,12 +4475,14 @@ static gint service_compare(gconstpointer a, gconstpointer b,
 		case CONNMAN_SERVICE_TYPE_GPS:
 		case CONNMAN_SERVICE_TYPE_VPN:
 		case CONNMAN_SERVICE_TYPE_GADGET:
+
 			break;
 		case CONNMAN_SERVICE_TYPE_WIFI:
 			return 1;
 		case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 		case CONNMAN_SERVICE_TYPE_QMI:
 		case CONNMAN_SERVICE_TYPE_CELLULAR:
+		case CONNMAN_SERVICE_TYPE_MK3:
 			return -1;
 		}
 	}
@@ -4732,6 +4744,9 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "Username") == TRUE) {
 		g_free(service->username);
 		service->username = g_strdup(value);
+	} else if (g_str_equal(key, "Provider") == TRUE) {
+		g_free(service->provider_name);
+		service->provider_name = g_strdup(value);
 	}
 }
 
@@ -4759,8 +4774,8 @@ const char* connman_service_get_string(struct connman_service *service, const ch
 	else if(g_str_equal(key, "Username") == TRUE) {
 		return service->username;
 	}
-	else if(g_str_equal(key, "Name") == TRUE) {
-		return service->name;
+	else if(g_str_equal(key, "Provider") == TRUE) {
+		return service->provider_name;
 	}
 
 	return NULL;
@@ -5544,6 +5559,7 @@ static connman_bool_t prepare_network(struct connman_service *service)
 	case CONNMAN_NETWORK_TYPE_BLUETOOTH_DUN:
 	case CONNMAN_NETWORK_TYPE_CELLULAR:
 	case CONNMAN_NETWORK_TYPE_QMI:
+	case CONNMAN_NETWORK_TYPE_MK3:
 		break;
 	}
 
@@ -5600,6 +5616,7 @@ static int service_connect(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_VPN:
 		break;
@@ -6320,6 +6337,8 @@ static enum connman_service_type convert_network_type(struct connman_network *ne
 		return CONNMAN_SERVICE_TYPE_CELLULAR;
 	case CONNMAN_NETWORK_TYPE_QMI:
 		return CONNMAN_SERVICE_TYPE_QMI;
+	case CONNMAN_NETWORK_TYPE_MK3:
+		return CONNMAN_SERVICE_TYPE_MK3;
 	}
 
 	return CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -6472,6 +6491,7 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 		service->favorite = TRUE;

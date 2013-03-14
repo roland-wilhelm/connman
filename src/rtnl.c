@@ -140,6 +140,14 @@ static void read_uevent(struct interface_data *interface)
 		return;
 	}
 
+	if(strncmp(interface->name, "tun_mk3", 7) == 0) {
+
+		interface->service_type = CONNMAN_SERVICE_TYPE_MK3;
+		interface->device_type = CONNMAN_DEVICE_TYPE_MK3;
+
+	}
+
+
 	filename = g_strdup_printf("/sys/class/net/%s/uevent",
 						interface->name);
 
@@ -180,10 +188,6 @@ static void read_uevent(struct interface_data *interface)
 			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
 
-		}
-		else if (strcmp(line + 8, "qmi") == 0) {
-			interface->service_type = CONNMAN_SERVICE_TYPE_QMI;
-			interface->device_type = CONNMAN_DEVICE_TYPE_QMI;
 		}
 		else {
 			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -474,7 +478,10 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 		g_hash_table_insert(interface_list,
 					GINT_TO_POINTER(index), interface);
 
-		if (type == ARPHRD_ETHER)
+		/*
+		 * FIXME: Wenn Ethernet funktioniert, kann type ARPHRD_NONE hier raus.
+		 */
+		if (type == ARPHRD_ETHER || type == ARPHRD_NONE)
 			read_uevent(interface);
 
 		__connman_technology_add_interface(interface->service_type,

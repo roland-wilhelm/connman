@@ -205,6 +205,8 @@ static int bearer2service(const char *bearer, enum connman_service_type *type)
 		*type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 	else if (g_strcmp0(bearer, "qmi") == 0)
 		*type = CONNMAN_SERVICE_TYPE_QMI;
+	else if (g_strcmp0(bearer, "mk3") == 0)
+		*type = CONNMAN_SERVICE_TYPE_MK3;
 	else
 		return -EINVAL;
 
@@ -231,6 +233,8 @@ static char *service2bearer(enum connman_service_type type)
 		return "";
 	case CONNMAN_SERVICE_TYPE_QMI:
 		return "qmi";
+	case CONNMAN_SERVICE_TYPE_MK3:
+			return "mk3";
 	}
 
 	return "";
@@ -852,6 +856,7 @@ static int service_type_weight(enum connman_service_type type)
 		return 2;
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 		return 1;
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
 	case CONNMAN_SERVICE_TYPE_SYSTEM:

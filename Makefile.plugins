@@ -53,6 +53,11 @@ builtin_modules += qmi
 builtin_sources += plugins/qmi.c
 endif
 
+if QMI
+builtin_modules += mk3
+builtin_sources += plugins/mk3.c
+endif
+
 if DUNDEE
 builtin_modules += dundee
 builtin_sources += plugins/dundee.c

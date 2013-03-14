@@ -341,6 +341,8 @@ static const char *get_name(enum connman_service_type type)
 		return "Cellular";
 	case CONNMAN_SERVICE_TYPE_QMI:
 		return "Qmi";
+	case CONNMAN_SERVICE_TYPE_MK3:
+		return "Mk3";
 	}
 
 	return NULL;
@@ -1133,6 +1135,7 @@ void __connman_technology_add_interface(enum connman_service_type type,
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -1172,6 +1175,7 @@ void __connman_technology_remove_interface(enum connman_service_type type,
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:

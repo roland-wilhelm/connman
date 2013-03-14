@@ -205,10 +205,11 @@ static void add_network(struct qmi_data *qmi)
 
 	if(qmi->provider)
 		g_free(qmi->provider);
-	qmi->provider = g_strdup(connman_service_get_string(service, "Name"));
+	qmi->provider = g_strdup(connman_service_get_string(service, "Provider"));
 	if(qmi->provider == NULL)
 		qmi->provider = g_strdup("no-name");
 
+	connman_network_set_name(network, qmi->provider);
 	connman_network_update(qmi->network);
 
 

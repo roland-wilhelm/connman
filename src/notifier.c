@@ -155,6 +155,7 @@ void __connman_notifier_connect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 		break;
 	}
 
@@ -202,6 +203,7 @@ void __connman_notifier_disconnect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_QMI:
+	case CONNMAN_SERVICE_TYPE_MK3:
 		break;
 	}
 

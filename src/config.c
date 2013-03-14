@@ -43,6 +43,7 @@ struct connman_config_service {
 	char *imsi;
 	char *sim_nr;
 	char *username;
+	char *provider_name;
 	unsigned int ssid_len;
 	char *eap;
 	char *identity;
@@ -95,6 +96,7 @@ static connman_bool_t cleanup = FALSE;
 #define SERVICE_KEY_PHASE2             "Phase2"
 #define SERVICE_KEY_PASSPHRASE         "Passphrase"
 #define SERVICE_KEY_USERNAME		   "Username"
+#define SERVICE_KEY_PROVIDER		   "Provider"
 #define SERVICE_KEY_HIDDEN             "Hidden"
 
 static const char *config_possible_keys[] = {
@@ -122,6 +124,7 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_USERNAME,
 	SERVICE_KEY_SIM,
 	SERVICE_KEY_HIDDEN,
+	SERVICE_KEY_PROVIDER,
 	NULL,
 };
 
@@ -188,6 +191,7 @@ free_only:
 	g_free(config_service->private_key_passphrase_type);
 	g_free(config_service->phase2);
 	g_free(config_service->passphrase);
+	g_free(config_service->provider_name);
 	g_slist_free_full(config_service->service_identifiers, g_free);
 	g_free(config_service->config_ident);
 	g_free(config_service->config_entry);
@@ -312,6 +316,12 @@ static int load_service(GKeyFile *keyfile, const char *group,
 	if (str != NULL) {
 		g_free(service->username);
 		service->username = str;
+	}
+
+	str = g_key_file_get_string(keyfile, group, SERVICE_KEY_PROVIDER, NULL);
+	if (str != NULL) {
+		g_free(service->provider_name);
+		service->provider_name = str;
 	}
 
 	hex_ssid = g_key_file_get_string(keyfile, group, SERVICE_KEY_SSID,
@@ -452,6 +462,7 @@ err:
 		g_free(service->username);
 		g_free(service->sim_nr);
 		g_free(service->imsi);
+		g_free(service->provider_name);
 		g_free(service);
 	}
 
@@ -852,6 +863,9 @@ static void provision_service(gpointer key, gpointer value, gpointer user_data)
 
 			if (config->username != NULL)
 					__connman_service_set_string(service, "Username", config->username);
+
+			if (config->provider_name != NULL)
+					__connman_service_set_string(service, "Provider", config->provider_name);
 
 			if (config->hidden == TRUE)
 				__connman_service_set_hidden(service);
