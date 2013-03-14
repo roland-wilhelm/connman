@@ -38,6 +38,7 @@ struct mk3_data {
 	gchar *name;
 	gchar *group;
 	gchar *devname;
+	gchar *ident;
 	guint8 strength;
 	struct connman_device *device;
 	struct connman_network *network;
@@ -184,6 +185,8 @@ static struct connman_network_driver network_driver = {
 static int mk3_probe(struct connman_device *device) {
 
 	struct mk3_data *mk3;
+	gint i;
+	GString *str;
 
 	DBG("device %p", device);
 
@@ -203,10 +206,27 @@ static int mk3_probe(struct connman_device *device) {
 
 	/* Index of the specific QMI-Device */
 	mk3->index = connman_device_get_index(device);
-	/* Name of the specific Device  */
+	/* Name of the specific Device  tun_mk3 */
 	mk3->devname = g_strdup(connman_device_get_string(device, "Interface"));
-	mk3->group = g_strdup("Car2Car");
-	mk3->name = g_strdup("Car2Car");
+	mk3->name = g_strdup("car2car");
+	mk3->group = g_strdup("none");
+
+	str = g_string_new(NULL);
+	for(i = 0; i < strlen(mk3->devname); i++) {
+
+		g_string_append_printf(str, "%02x", mk3->devname[i]);
+	}
+
+	g_string_append_c(str, '_');
+
+	for(i = 0; i < strlen(mk3->name); i++) {
+
+		g_string_append_printf(str, "%02x", mk3->name[i]);
+	}
+
+	mk3->ident = g_string_free(str, FALSE);
+	connman_device_set_ident(mk3->device, mk3->ident);
+
 
 
 	return 0;
@@ -237,6 +257,7 @@ static void mk3_remove(struct connman_device *device) {
 	g_free(mk3->devname);
 	g_free(mk3->group);
 	g_free(mk3->name);
+	g_free(mk3->ident);
 
 	g_free(mk3);
 
