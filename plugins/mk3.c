@@ -62,7 +62,6 @@ static void delete_network(struct mk3_data *mk3) {
 static void add_network(struct mk3_data *mk3) {
 
 	struct connman_network *network = NULL;
-	gchar *ident = NULL;
 
 	g_return_if_fail(mk3);
 
@@ -145,7 +144,7 @@ static void network_remove(struct connman_network *network) {
 static int network_connect(struct connman_network *network) {
 
 	struct mk3_data *mk3 = NULL;
-	int err = 0;
+
 
 	DBG("Network %p", network);
 
