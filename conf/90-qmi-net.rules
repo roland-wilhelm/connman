@@ -1,0 +1,2 @@
+
+SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="19d2", ATTRS{idProduct}=="0326", KERNEL=="wwan?", NAME="qmi%n"
