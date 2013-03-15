@@ -446,7 +446,7 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 	GString *dev;
 	GDir *dir = NULL;
 	gboolean ret;
-	GError *error;
+	GError *error = NULL;
 	int i;
 
 	DBG("device name %s", devname);
