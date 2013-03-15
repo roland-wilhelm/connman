@@ -450,7 +450,7 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 	gboolean ret;
 	GError *error = NULL;
 	gboolean found = FALSE;
-	int i;
+
 
 	DBG("device name %s", devname);
 
