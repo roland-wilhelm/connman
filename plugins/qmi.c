@@ -442,60 +442,139 @@ static struct connman_network_driver network_driver = {
 
 static gchar* get_device_path_from_name(const gchar *devname) {
 
-	const gchar *device_path = NULL;
-	GString *dev;
+	const gchar *cdc_wdm = NULL;
+	GString *qmi_path;
+	gchar *qmi_link = NULL, *device_link = NULL;
+	gchar *help;
 	GDir *dir = NULL;
 	gboolean ret;
 	GError *error = NULL;
+	gboolean found = FALSE;
 	int i;
 
 	DBG("device name %s", devname);
 
 	g_return_val_if_fail(devname, NULL);
 
-	dev = g_string_new("/sys/class/net/");
-	dev = g_string_append(dev, devname);
-	DBG("path QMI device %s", dev->str);
-	ret = g_file_test(dev->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
+	qmi_path = g_string_new("/sys/class/net/");
+	qmi_path = g_string_append(qmi_path, devname);
+	DBG("path QMI device %s", qmi_path->str);
+	ret = g_file_test(qmi_path->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
 	if(ret == FALSE) {
 
-		connman_error("Path %s not exists", dev->str);
-		g_string_free(dev, TRUE);
+		connman_error("Path %s not exists", qmi_path->str);
+		g_string_free(qmi_path, TRUE);
 		return NULL;
 	}
 
-	dev = g_string_append(dev, "/device/usb/");
-	DBG("path QMI device %s", dev->str);
-	dir = g_dir_open(dev->str, 0, &error);
-	if(dir == NULL) {
+	/* /sys/class/net/qmi0/device */
+	qmi_path = g_string_append(qmi_path, "/device");
+	DBG("path QMI device %s", qmi_path->str);
 
-		connman_error("open path %s not possible, error %s", dev->str, error->message);
-		g_string_free(dev, TRUE);
+	/* read sym link of device */
+	qmi_link = g_file_read_link(qmi_path->str, &error);
+	if(qmi_link == NULL) {
+
+		connman_error("Failure sym link reading %s", error->message);
+		g_string_free(qmi_path, TRUE);
 		g_error_free(error);
 		error = NULL;
 		return NULL;
+	}
+
+	/* get last occurrence "/" of device sym link */
+	help = g_strdup(g_strrstr(qmi_link, "/"));
+	g_free(qmi_link);
+	qmi_link = help;
+	DBG("Sym link qmi device %s", qmi_link);
+
+	g_string_free(qmi_path, TRUE);
+
+
+	qmi_path = g_string_new("/sys/class/usb/");
+	DBG("path QMI device %s", qmi_path->str);
+	ret = g_file_test(qmi_path->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
+	if(ret == FALSE) {
+
+		connman_error("Path %s not exists", qmi_path->str);
+		g_string_free(qmi_path, TRUE);
+		g_free(qmi_link);
+
+		return NULL;
+	}
+
+
+	dir = g_dir_open(qmi_path->str, 0, &error);
+	if(dir == NULL) {
+
+		connman_error("open path %s not possible, error %s", qmi_path->str, error->message);
+		g_string_free(qmi_path, TRUE);
+		g_error_free(error);
+		error = NULL;
+		g_free(qmi_link);
+
+		return NULL;
 
 	}
 
-	i = 0;
-	do {
+	while((cdc_wdm = g_dir_read_name(dir)) != NULL) {
 
-		device_path = g_dir_read_name(dir);
-		i++;
-		if(i > 10) {
-			return NULL;
+
+		if(strncmp(cdc_wdm, "cdc-wdm", 7) != 0)
+			continue;
+
+		help = g_strdup_printf("%s%s/%s", qmi_path->str, cdc_wdm, "device");
+		device_link = g_file_read_link(help, &error);
+		g_free(help);
+		if(device_link == NULL) {
+
+			connman_error("Failure sym link reading %s", error->message);
+			g_error_free(error);
+			error = NULL;
+
+			continue;
 		}
-	}while(strncmp(device_path, "cdc-wdm", 7) != 0);
 
-	g_string_free(dev, TRUE);
-	dev = g_string_new(device_path);
-	dev = g_string_prepend(dev, "/dev/");
+		/* get last occurrence "/" of device sym link */
+		help = g_strdup(g_strrstr(device_link, "/"));
+		g_free(device_link);
+		device_link = help;
 
-	DBG("device name %s path %s", devname, dev->str);
+		DBG("Sym link qmi device %s", device_link);
 
+		if(strncmp(qmi_link, device_link, 9) == 0) {
+
+			found = TRUE;
+
+			break;
+		}
+
+
+	}
+
+	g_free(qmi_link);
+	g_free(device_link);
+	g_string_free(qmi_path, TRUE);
 	g_dir_close(dir);
 
-	return g_string_free(dev, FALSE);
+	if(found == TRUE) {
+
+		found = FALSE;
+
+		qmi_path = g_string_new(cdc_wdm);
+		qmi_path = g_string_prepend(qmi_path, "/dev/");
+		DBG("device name %s path %s", devname, qmi_path->str);
+
+		return g_string_free(qmi_path, FALSE);
+	}
+	else {
+
+		connman_error("No device path to device %s found", devname);
+		return NULL;
+	}
+
+
+
 }
 
 
