@@ -122,6 +122,7 @@ static void read_uevent(struct interface_data *interface)
 {
 	char *filename, line[128];
 	connman_bool_t found_devtype;
+	connman_bool_t found_devwwan;
 	FILE *f;
 
 	if (ether_blacklisted(interface->name) == TRUE) {
@@ -130,14 +131,6 @@ static void read_uevent(struct interface_data *interface)
 	} else {
 		interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 		interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-	}
-
-	if(strncmp(interface->name, "qmi", 3) == 0) {
-
-		interface->service_type = CONNMAN_SERVICE_TYPE_QMI;
-		interface->device_type = CONNMAN_DEVICE_TYPE_QMI;
-
-		return;
 	}
 
 	if(strncmp(interface->name, "tun_mk3", 7) == 0) {
@@ -159,6 +152,7 @@ static void read_uevent(struct interface_data *interface)
 		return;
 
 	found_devtype = FALSE;
+	found_devwwan = FALSE;
 	while (fgets(line, sizeof(line), f)) {
 		char *pos;
 
@@ -175,27 +169,78 @@ static void read_uevent(struct interface_data *interface)
 		if (strcmp(line + 8, "wlan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
 			interface->device_type = CONNMAN_DEVICE_TYPE_WIFI;
+			break;
 		}
 		else if (strcmp(line + 8, "wwan") == 0) {
+
+			found_devwwan = TRUE;
 			interface->service_type = CONNMAN_SERVICE_TYPE_CELLULAR;
 			interface->device_type = CONNMAN_DEVICE_TYPE_CELLULAR;
+			break;
 		}
 		else if (strcmp(line + 8, "bluetooth") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_BLUETOOTH;
 			interface->device_type = CONNMAN_DEVICE_TYPE_BLUETOOTH;
+			break;
 		}
 		else if (strcmp(line + 8, "gadget") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
+			break;
 
 		}
 		else {
 			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 			interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
+			break;
 		}
 	}
 
 	fclose(f);
+
+
+	if(found_devwwan == TRUE) {
+
+		/*
+		 * FIXME: If wwan recognized, check what kind of driver/ protocol it needs.
+		 * 		  e.g. "/sys/class/net/wwan0/device/uevent" DRIVER=qmi_wwan --> QMI
+		 */
+
+		filename = g_strdup_printf("/sys/class/net/%s/device/uevent", interface->name);
+
+		f = fopen(filename, "re");
+
+		g_free(filename);
+
+		if (f == NULL)
+			return;
+
+
+		while (fgets(line, sizeof(line), f)) {
+			char *pos;
+
+			pos = strchr(line, '\n');
+			if (pos == NULL)
+				continue;
+			pos[0] = '\0';
+
+			if (strncmp(line, "DRIVER=", 7) != 0)
+				continue;
+
+
+			if (strcmp(line + 7, "qmi_wwan") == 0) {
+
+				interface->service_type = CONNMAN_SERVICE_TYPE_QMI;
+				interface->device_type = CONNMAN_DEVICE_TYPE_QMI;
+				break;
+			}
+
+		}
+
+		fclose(f);
+
+	}
+
 
 	if (found_devtype)
 		return;
