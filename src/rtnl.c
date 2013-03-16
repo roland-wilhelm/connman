@@ -202,8 +202,8 @@ static void read_uevent(struct interface_data *interface)
 	if(found_devwwan == TRUE) {
 
 		/*
-		 * FIXME: If wwan recognized, check what kind of driver/ protocol it needs.
-		 * 		  e.g. "/sys/class/net/wwan0/device/uevent" DRIVER=qmi_wwan --> QMI
+		 * If wwan recognized, check what kind of driver/ protocol it supported.
+		 * e.g. "/sys/class/net/wwan0/device/uevent" DRIVER=qmi_wwan --> QMI
 		 */
 
 		filename = g_strdup_printf("/sys/class/net/%s/device/uevent", interface->name);
