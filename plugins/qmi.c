@@ -297,12 +297,14 @@ network_connect_append(DBusMessageIter *iter, void *user_data) {
 
 	g_return_if_fail(qmi);
 
+#undef VALIDATE_UNKNOWN
+#define VALIDATE_UNKNOWN(str) (str ? str : "")
 
 	DBG("Device path %s object path %s", qmi->devpath, qmi->object_path);
 
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->username);
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->passphrase);
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &qmi->apn);
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &VALIDATE_UNKNOWN(qmi->username));
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &VALIDATE_UNKNOWN(qmi->passphrase));
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &VALIDATE_UNKNOWN(qmi->apn));
 
 }
 
@@ -458,7 +460,7 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 
 	qmi_path = g_string_new("/sys/class/net/");
 	qmi_path = g_string_append(qmi_path, devname);
-	DBG("path QMI device %s", qmi_path->str);
+	DBG("QMI device %s", qmi_path->str);
 	ret = g_file_test(qmi_path->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
 	if(ret == FALSE) {
 
@@ -469,7 +471,7 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 
 	/* /sys/class/net/qmi0/device */
 	qmi_path = g_string_append(qmi_path, "/device");
-	DBG("path QMI device %s", qmi_path->str);
+	DBG("QMI device file %s", qmi_path->str);
 
 	/* read sym link of device */
 	qmi_link = g_file_read_link(qmi_path->str, &error);
@@ -486,13 +488,13 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 	help = g_strdup(g_strrstr(qmi_link, "/"));
 	g_free(qmi_link);
 	qmi_link = help;
-	DBG("Sym link qmi device %s", qmi_link);
+	DBG("Qmi device file sym link %s", qmi_link);
 
 	g_string_free(qmi_path, TRUE);
 
 
 	qmi_path = g_string_new("/sys/class/usb/");
-	DBG("path QMI device %s", qmi_path->str);
+	DBG("QMI cdc-wdm %s", qmi_path->str);
 	ret = g_file_test(qmi_path->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
 	if(ret == FALSE) {
 
@@ -524,6 +526,7 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 			continue;
 
 		help = g_strdup_printf("%s%s/%s", qmi_path->str, cdc_wdm, "device");
+		DBG("QMI cdc-wdm device file %s", help);
 		device_link = g_file_read_link(help, &error);
 		g_free(help);
 		if(device_link == NULL) {
@@ -540,7 +543,7 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 		g_free(device_link);
 		device_link = help;
 
-		DBG("Sym link qmi device %s", device_link);
+		DBG("QMI cdc-wdm device file sym link %s", device_link);
 
 		if(strncmp(qmi_link, device_link, 9) == 0) {
 
@@ -548,7 +551,6 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 
 			break;
 		}
-
 
 	}
 
