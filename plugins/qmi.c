@@ -30,6 +30,7 @@
 #include <connman/log.h>
 #include <connman/technology.h>
 #include <connman/service.h>
+#include <connman.h>
 
 
 static DBusConnection *connection = NULL;
