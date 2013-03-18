@@ -4478,11 +4478,11 @@ static gint service_compare(gconstpointer a, gconstpointer b,
 
 			break;
 		case CONNMAN_SERVICE_TYPE_WIFI:
+		case CONNMAN_SERVICE_TYPE_QMI:
+		case CONNMAN_SERVICE_TYPE_MK3:
 			return 1;
 		case CONNMAN_SERVICE_TYPE_BLUETOOTH:
-		case CONNMAN_SERVICE_TYPE_QMI:
 		case CONNMAN_SERVICE_TYPE_CELLULAR:
-		case CONNMAN_SERVICE_TYPE_MK3:
 			return -1;
 		}
 	}
