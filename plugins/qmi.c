@@ -292,19 +292,22 @@ static void
 network_connect_append(DBusMessageIter *iter, void *user_data) {
 
 	struct qmi_data *qmi = (struct qmi_data *)user_data;
+	gchar *user, *pw, *apn;
 
 	DBG("qmi data %p messageIter %p", qmi, iter);
 
 	g_return_if_fail(qmi);
 
-#undef VALIDATE_UNKNOWN
-#define VALIDATE_UNKNOWN(str) (str ? str : "")
+	user = qmi->username ? qmi->username : "";
+	pw = qmi->passphrase ? qmi->passphrase : "";
+	apn = qmi->apn ? qmi->apn : "";
+
 
 	DBG("Device path %s object path %s", qmi->devpath, qmi->object_path);
 
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &VALIDATE_UNKNOWN(qmi->username));
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &VALIDATE_UNKNOWN(qmi->passphrase));
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &VALIDATE_UNKNOWN(qmi->apn));
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &user);
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &pw);
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &apn);
 
 }
 
