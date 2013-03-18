@@ -752,12 +752,6 @@ static int set_nat(struct connman_technology *technology,
 	return 0;
 }
 
-//
-//static struct connman_technology_driver tech_driver = {
-//	.name				= "cdc_ethernet",
-//	.type				= CONNMAN_SERVICE_TYPE_GADGET,
-//	.set_tethering		= set_nat,
-//};
 
 static int tech_probe(struct connman_technology *technology)
 {
