@@ -334,6 +334,19 @@ static struct connman_device_driver mk3_driver = {
 };
 
 
+static int set_nat(struct connman_technology *technology,
+				const char *identifier, const char *passphrase,
+				const char *bridge, connman_bool_t enabled)
+{
+	DBG("Set NAT MK3 enabled %d", enabled);
+
+	if (enabled)
+		__connman_nat_enable("mk3", NULL, 0);
+	else
+		__connman_nat_disable("mk3");
+
+	return 0;
+}
 
 static int tech_probe(struct connman_technology *technology) {
 
@@ -346,10 +359,11 @@ static void tech_remove(struct connman_technology *technology) {
 
 static struct connman_technology_driver tech_driver = {
 
-	.name	= "mk3",
-	.type	= CONNMAN_SERVICE_TYPE_MK3,
-	.probe	= tech_probe,
-	.remove	= tech_remove,
+	.name				= "mk3",
+	.type				= CONNMAN_SERVICE_TYPE_MK3,
+	.probe				= tech_probe,
+	.remove				= tech_remove,
+	.set_tethering		= set_nat,
 };
 
 
