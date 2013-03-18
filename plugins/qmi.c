@@ -737,6 +737,28 @@ static struct connman_device_driver qmi_driver = {
 	.disable	= qmi_disable,
 };
 
+
+static int set_nat(struct connman_technology *technology,
+				const char *identifier, const char *passphrase,
+				const char *bridge, connman_bool_t enabled)
+{
+	DBG("Set NAT QMI enabled %d", enabled);
+
+	if (enabled)
+		__connman_nat_enable("qmi", "0.0.0.0", 24);
+	else
+		__connman_nat_disable("qmi");
+
+	return 0;
+}
+
+//
+//static struct connman_technology_driver tech_driver = {
+//	.name				= "cdc_ethernet",
+//	.type				= CONNMAN_SERVICE_TYPE_GADGET,
+//	.set_tethering		= set_nat,
+//};
+
 static int tech_probe(struct connman_technology *technology)
 {
 	return 0;
@@ -751,6 +773,7 @@ static struct connman_technology_driver tech_driver = {
 	.type		= CONNMAN_SERVICE_TYPE_QMI,
 	.probe		= tech_probe,
 	.remove		= tech_remove,
+	.set_tethering		= set_nat,
 };
 
 static guint8
