@@ -1928,7 +1928,15 @@ static int tech_set_tethering(struct connman_technology *technology,
 	int err;
 
 	DBG("");
+	
+	DBG("Set NAT WiFi enabled %d", enabled);
 
+	if (enabled)
+		__connman_nat_enable("wifi", NULL, 0);
+	else
+		__connman_nat_disable("wifi");
+
+	
 	if (enabled == FALSE) {
 		for (list = iface_list; list; list = list->next) {
 			wifi = list->data;
