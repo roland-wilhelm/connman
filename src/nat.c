@@ -82,13 +82,24 @@ static int enable_nat(struct connman_nat *nat)
 		return 0;
 
 	/* Enable masquerading */
-	err = __connman_iptables_command("-t nat -A POSTROUTING "
+	if(nat->address) {
+
+		err = __connman_iptables_command("-t nat -A POSTROUTING "
 					"-s %s/%d -o %s -j MASQUERADE",
 					nat->address,
 					nat->prefixlen,
 					nat->interface);
-	if (err < 0)
-		return err;
+		if (err < 0)
+			return err;
+	}
+	else {
+
+		err = __connman_iptables_command("-t nat -A POSTROUTING "
+					"-o %s -j MASQUERADE",
+					nat->interface);
+		if (err < 0)
+			return err;
+	}
 
 	return __connman_iptables_commit("nat");
 }
@@ -101,13 +112,24 @@ static void disable_nat(struct connman_nat *nat)
 		return;
 
 	/* Disable masquerading */
-	err = __connman_iptables_command("-t nat -D POSTROUTING "
-					"-s %s/%d -o %s -j MASQUERADE",
-					nat->address,
-					nat->prefixlen,
-					nat->interface);
-	if (err < 0)
-		return;
+	if(nat->address) {
+
+		err = __connman_iptables_command("-t nat -D POSTROUTING "
+						"-s %s/%d -o %s -j MASQUERADE",
+						nat->address,
+						nat->prefixlen,
+						nat->interface);
+		if (err < 0)
+			return;
+	}
+	else {
+
+		err = __connman_iptables_command("-t nat -D POSTROUTING "
+						"-o %s -j MASQUERADE",
+						nat->interface);
+		if (err < 0)
+			return;
+	}
 
 	__connman_iptables_commit("nat");
 }
@@ -132,7 +154,11 @@ int __connman_nat_enable(const char *name, const char *address,
 		return -ENOMEM;
 	}
 
-	nat->address = g_strdup(address);
+	if(address != NULL)
+		nat->address = g_strdup(address);
+	else
+		nat->address = NULL;
+
 	nat->prefixlen = prefixlen;
 
 	g_hash_table_replace(nat_hash, g_strdup(name), nat);

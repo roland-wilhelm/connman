@@ -746,7 +746,7 @@ static int set_nat(struct connman_technology *technology,
 	DBG("Set NAT QMI enabled %d", enabled);
 
 	if (enabled)
-		__connman_nat_enable("qmi", "0.0.0.0", 24);
+		__connman_nat_enable("qmi", NULL, 0);
 	else
 		__connman_nat_disable("qmi");
 
@@ -764,10 +764,10 @@ static void tech_remove(struct connman_technology *technology)
 }
 
 static struct connman_technology_driver tech_driver = {
-	.name		= "qmi",
-	.type		= CONNMAN_SERVICE_TYPE_QMI,
-	.probe		= tech_probe,
-	.remove		= tech_remove,
+	.name				= "qmi",
+	.type				= CONNMAN_SERVICE_TYPE_QMI,
+	.probe				= tech_probe,
+	.remove				= tech_remove,
 	.set_tethering		= set_nat,
 };
 
