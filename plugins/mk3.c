@@ -30,6 +30,7 @@
 #include <connman/log.h>
 #include <connman/technology.h>
 
+#include <connman.h>
 
 
 struct mk3_data {

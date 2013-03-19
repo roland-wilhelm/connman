@@ -56,6 +56,8 @@
 
 #include <gsupplicant/gsupplicant.h>
 
+#include <connman.h>
+
 #define CLEANUP_TIMEOUT   8	/* in seconds */
 #define INACTIVE_TIMEOUT  12	/* in seconds */
 #define MAXIMUM_RETRIES   2
