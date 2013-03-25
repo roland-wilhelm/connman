@@ -496,17 +496,24 @@ static gchar* get_device_path_from_name(const gchar *devname) {
 
 	g_string_free(qmi_path, TRUE);
 
-
+	/* check, whether "/sys/class/usb/" or "/sys/class/usbmisc/" exists and use it*/
 	qmi_path = g_string_new("/sys/class/usb/");
 	DBG("QMI cdc-wdm %s", qmi_path->str);
 	ret = g_file_test(qmi_path->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
 	if(ret == FALSE) {
 
-		connman_error("Path %s not exists", qmi_path->str);
 		g_string_free(qmi_path, TRUE);
-		g_free(qmi_link);
+		qmi_path = g_string_new("/sys/class/usbmisc/");
+		DBG("QMI cdc-wdm %s", qmi_path->str);
+		ret = g_file_test(qmi_path->str, G_FILE_TEST_EXISTS |  G_FILE_TEST_IS_DIR);
+		if(ret == FALSE) {
 
-		return NULL;
+			connman_error("Path %s not exists", qmi_path->str);
+			g_string_free(qmi_path, TRUE);
+			g_free(qmi_link);
+
+			return NULL;
+		}
 	}
 
 
