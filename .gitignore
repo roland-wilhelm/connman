@@ -78,3 +78,9 @@ vpn/connman-vpn.service
 vpn/net.connman.vpn.service
 *.*~
 *.log
+
+connman.config
+connman.creator
+connman.creator.user
+connman.files
+connman.includes

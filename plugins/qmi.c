@@ -213,7 +213,7 @@ static void add_network(struct qmi_data *qmi)
 	connman_network_update(qmi->network);
 
 
-	DBG("network %p ISMI %s APN %s PW %s Username %s", qmi->network, qmi->imsi, qmi->apn, qmi->passphrase, qmi->username);
+    DBG("network %p IMSI %s APN %s PW %s Username %s", qmi->network, qmi->imsi, qmi->apn, qmi->passphrase, qmi->username);
 	connman_service_unref(service);
 	if((qmi->imsi == NULL) || (qmi->apn == NULL) || (qmi->passphrase == NULL)) {
 
@@ -285,6 +285,9 @@ network_connect_callback(DBusMessage *message, void *user_data) {
 								get_properties_callback,
 								qmi,
 								NULL);
+
+    //FIXME Hack NAT enable by default
+    __connman_nat_enable("qmi", NULL, 0);
 
 
 }
