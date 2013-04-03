@@ -740,6 +740,9 @@ static int wifi_enable(struct connman_device *device)
 	if (ret < 0)
 		return ret;
 
+    //FIXME hack to enable NAT if technology is up
+    __connman_nat_enable("wifi", NULL, 0);
+
 	return -EINPROGRESS;
 }
 
@@ -772,6 +775,9 @@ static int wifi_disable(struct connman_device *device)
 	ret = g_supplicant_interface_remove(wifi->interface, NULL, NULL);
 	if (ret < 0)
 		return ret;
+
+    //FIXME hack to disbale NAT if technology is down
+    __connman_nat_disable("wifi");
 
 	return -EINPROGRESS;
 }
@@ -1113,7 +1119,9 @@ static void connect_callback(int result, GSupplicantInterface *interface,
 	} else if (result < 0) {
 		connman_network_set_error(network,
 					CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
-	}
+    }
+
+
 }
 
 static GSupplicantSecurity network_security(const char *security)
@@ -2022,12 +2030,12 @@ static int tech_set_regdom(struct connman_technology *technology, const char *al
 }
 
 static struct connman_technology_driver tech_driver = {
-	.name		= "wifi",
-	.type		= CONNMAN_SERVICE_TYPE_WIFI,
-	.probe		= tech_probe,
-	.remove		= tech_remove,
+    .name           = "wifi",
+    .type           = CONNMAN_SERVICE_TYPE_WIFI,
+    .probe          = tech_probe,
+    .remove         = tech_remove,
 	.set_tethering	= tech_set_tethering,
-	.set_regdom	= tech_set_regdom,
+    .set_regdom     = tech_set_regdom,
 };
 
 static int wifi_init(void)

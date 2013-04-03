@@ -408,6 +408,8 @@ network_disconnect_callback(DBusMessage *message, void *user_data) {
 	}
 
 	qmi->modem_connected = FALSE;
+    //FIXME Hack NAT enable by default
+    __connman_nat_disable("qmi");
 
 	DBG("Device %s connected %d", qmi->devpath, qmi->modem_connected);
 
@@ -749,21 +751,6 @@ static struct connman_device_driver qmi_driver = {
 };
 
 
-static int set_nat(struct connman_technology *technology,
-				const char *identifier, const char *passphrase,
-				const char *bridge, connman_bool_t enabled)
-{
-	DBG("Set NAT QMI enabled %d", enabled);
-
-	if (enabled)
-		__connman_nat_enable("qmi", NULL, 0);
-	else
-		__connman_nat_disable("qmi");
-
-	return 0;
-}
-
-
 static int tech_probe(struct connman_technology *technology)
 {
 	return 0;
@@ -778,7 +765,6 @@ static struct connman_technology_driver tech_driver = {
 	.type				= CONNMAN_SERVICE_TYPE_QMI,
 	.probe				= tech_probe,
 	.remove				= tech_remove,
-	.set_tethering		= set_nat,
 };
 
 static guint8
