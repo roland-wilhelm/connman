@@ -422,7 +422,7 @@ static int network_connect(struct connman_network *network)
 								qmi,
 								NULL);
 
-	return 0;
+	return -EINPROGRESS;
 }
 
 /**
