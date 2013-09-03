@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,21 +20,24 @@
  *
  */
 
+#ifndef __CONNMANCTL_COMMANDS_H
+#define __CONNMANCTL_COMMANDS_H
+
 #include <dbus/dbus.h>
 
-struct tech_data {
-	char *path;
-	char *name;
-	dbus_bool_t powered;
-	dbus_bool_t connected;
-};
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-void extract_properties(DBusMessageIter *dict);
-void match_tech_name(DBusMessage *message, char *tech_name,
-			struct tech_data *tech);
-void extract_tech(DBusMessage *message);
-int list_tech(DBusConnection *connection, char *function);
-int set_technology(DBusConnection *connection, DBusMessage *message, char *key,
-						char *tech, dbus_bool_t value);
-int scan_technology(DBusConnection *connection, DBusMessage *message,
-						char *tech);
+typedef char *(*__connmanctl_lookup_cb)(const char *text, int state);
+
+int __connmanctl_commands(DBusConnection *connection, char *argv[], int argc);
+char *__connmanctl_lookup_command(const char *text, int state);
+void __connmanctl_monitor_completions(DBusConnection *dbus_conn);
+__connmanctl_lookup_cb __connmanctl_get_lookup_func(const char *text);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __CONNMANCTL_COMMANDS_H */

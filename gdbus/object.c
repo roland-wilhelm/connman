@@ -1496,7 +1496,7 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 
 gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message)
 {
-	dbus_bool_t result;
+	dbus_bool_t result = FALSE;
 
 	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_METHOD_CALL)
 		dbus_message_set_no_reply(message, TRUE);
@@ -1507,11 +1507,12 @@ gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message)
 		const GDBusArgInfo *args;
 
 		if (!check_signal(connection, path, interface, name, &args))
-			return FALSE;
+			goto out;
 	}
 
 	result = dbus_connection_send(connection, message, NULL);
 
+out:
 	dbus_message_unref(message);
 
 	return result;
@@ -1701,8 +1702,11 @@ void g_dbus_emit_property_changed(DBusConnection *connection,
 	if (iface == NULL)
 		return;
 
-	/* Don't emit property changed if interface is not yet published */
-	if (g_slist_find(data->added, iface))
+	/*
+	 * If ObjectManager is attached, don't emit property changed if
+	 * interface is not yet published
+	 */
+	if (root && g_slist_find(data->added, iface))
 		return;
 
 	property = find_property(iface->properties, name);

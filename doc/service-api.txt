@@ -22,12 +22,18 @@ Methods		dict GetProperties()  [deprecated]
 			changeable. On success a PropertyChanged signal
 			will be emitted.
 
+			Properties cannot be set for hidden WiFi service
+			entries or provisioned services.
+
 			Possible Errors: [service].Error.InvalidArguments
 					 [service].Error.InvalidProperty
 
 		void ClearProperty(string name)
 
 			Clears the value of the specified property.
+
+			Properties cannot be cleared for hidden WiFi service
+			entries or provisioned services.
 
 			Possible Errors: [service].Error.InvalidArguments
 					 [service].Error.InvalidProperty
@@ -48,6 +54,11 @@ Methods		dict GetProperties()  [deprecated]
 			setting a longer D-Bus timeout might be a really
 			good idea.
 
+			Calling Connect() on a hidden WiFi service entry will
+			query the missing SSID via the Agent API causing a
+			WiFi service with the given SSID to be scanned,
+			created and connected.
+
 			Possible Errors: [service].Error.InvalidArguments
 
 		void Disconnect()
@@ -61,7 +72,10 @@ Methods		dict GetProperties()  [deprecated]
 			method will fail.
 
 			This method can also be used to abort a previous
-			connectiong attempt via the Connect method.
+			connection attempt via the Connect method.
+
+			Hidden WiFi service entries cannot be disconnected
+			as they always stay in idle state.
 
 			Possible Errors: [service].Error.InvalidArguments
 
@@ -81,9 +95,10 @@ Methods		dict GetProperties()  [deprecated]
 			service is in the State=failure, this method can
 			also be used to reset the service.
 
-			Calling this method on Ethernet devices will cause
-			an error message. It is not possible to remove these
-			kind of devices.
+			Calling this method on Ethernet devices, hidden WiFi
+			services or provisioned services will cause an error
+			message. It is not possible to remove these kind of
+			services.
 
 			Possible Errors: [service].Error.InvalidArguments
 
@@ -92,18 +107,12 @@ Methods		dict GetProperties()  [deprecated]
 			If a service has been used before, this allows a
 			reorder of the favorite services.
 
-			The target service object must be part of this
-			profile. Moving between profiles is not supported.
-
 			Possible Errors: [service].Error.InvalidArguments
 
 		void MoveAfter(object service)
 
 			If a service has been used before, this allows a
 			reorder of the favorite services.
-
-			The target service object must be part of this
-			profile. Moving between profiles is not supported.
 
 			Possible Errors: [service].Error.InvalidArguments
 
@@ -471,18 +480,15 @@ Properties	string State [readonly]
 
 				The Ethernet MTU (default is 1500).
 
-			uint16 Speed [readonly]
+			uint16 Speed [readonly] [deprecated]
 
 				Selected speed of the line.
 
-				This information might not always be
-				available.
+				This information is not available.
 
-			string Duplex [readonly]
+			string Duplex [readonly] [deprecated]
 
 				Selected duplex settings of the line.
-
 				Possible values are "half" and "full".
 
-				This information might not always be
-				available.
+				This information is not available.

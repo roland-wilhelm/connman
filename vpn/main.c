@@ -84,14 +84,14 @@ static void parse_config(GKeyFile *config, const char *file)
 	GError *error = NULL;
 	int timeout;
 
-	if (config == NULL)
+	if (!config)
 		return;
 
 	DBG("parsing %s", file);
 
 	timeout = g_key_file_get_integer(config, "General",
 			"InputRequestTimeout", &error);
-	if (error == NULL && timeout >= 0)
+	if (!error && timeout >= 0)
 		connman_vpn_settings.timeout_inputreq = timeout * 1000;
 
 	g_clear_error(&error);
@@ -103,7 +103,7 @@ static int config_init(const char *file)
 
 	config = load_config(file);
 	parse_config(config, file);
-	if (config != NULL)
+	if (config)
 		g_key_file_free(config);
 
 	return 0;
@@ -188,11 +188,11 @@ static gchar *option_config = NULL;
 static gchar *option_debug = NULL;
 static gchar *option_plugin = NULL;
 static gchar *option_noplugin = NULL;
-static gboolean option_detach = TRUE;
-static gboolean option_version = FALSE;
-static gboolean option_routes = FALSE;
+static bool option_detach = true;
+static bool option_version = false;
+static bool option_routes = false;
 
-static gboolean parse_debug(const char *key, const char *value,
+static bool parse_debug(const char *key, const char *value,
 					gpointer user_data, GError **error)
 {
 	if (value)
@@ -200,7 +200,7 @@ static gboolean parse_debug(const char *key, const char *value,
 	else
 		option_debug = g_strdup("*");
 
-	return TRUE;
+	return true;
 }
 
 static GOptionEntry options[] = {
@@ -244,8 +244,8 @@ int main(int argc, char *argv[])
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
 
-	if (g_option_context_parse(context, &argc, &argv, &error) == FALSE) {
-		if (error != NULL) {
+	if (!g_option_context_parse(context, &argc, &argv, &error)) {
+		if (error) {
 			g_printerr("%s\n", error->message);
 			g_error_free(error);
 		} else
@@ -255,12 +255,12 @@ int main(int argc, char *argv[])
 
 	g_option_context_free(context);
 
-	if (option_version == TRUE) {
+	if (option_version) {
 		printf("%s\n", VERSION);
 		exit(0);
 	}
 
-	if (option_detach == TRUE) {
+	if (option_detach) {
 		if (daemon(0, 0)) {
 			perror("Can't start daemon");
 			exit(1);
@@ -273,10 +273,20 @@ int main(int argc, char *argv[])
 			perror("Failed to create state directory");
 	}
 
+	/*
+	 * At some point the VPN stuff is migrated into VPN_STORAGEDIR
+	 * and this mkdir() call can be removed.
+	 */
 	if (mkdir(STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
 				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
 		if (errno != EEXIST)
 			perror("Failed to create storage directory");
+	}
+
+	if (mkdir(VPN_STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
+				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
+		if (errno != EEXIST)
+			perror("Failed to create VPN storage directory");
 	}
 
 	umask(0077);
@@ -288,8 +298,8 @@ int main(int argc, char *argv[])
 	dbus_error_init(&err);
 
 	conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, VPN_SERVICE, &err);
-	if (conn == NULL) {
-		if (dbus_error_is_set(&err) == TRUE) {
+	if (!conn) {
+		if (dbus_error_is_set(&err)) {
 			fprintf(stderr, "%s\n", err.message);
 			dbus_error_free(&err);
 		} else
@@ -299,15 +309,16 @@ int main(int argc, char *argv[])
 
 	g_dbus_set_disconnect_function(conn, disconnect_callback, NULL, NULL);
 
-	__connman_log_init(argv[0], option_debug, option_detach, FALSE,
+	__connman_log_init(argv[0], option_debug, option_detach, false,
 			"Connection Manager VPN daemon", VERSION);
 	__connman_dbus_init(conn);
 
-	if (option_config == NULL)
+	if (!option_config)
 		config_init(CONFIGMAINFILE);
 	else
 		config_init(option_config);
 
+	__connman_inotify_init();
 	__connman_agent_init();
 	__vpn_provider_init(option_routes);
 	__vpn_manager_init();
@@ -315,6 +326,7 @@ int main(int argc, char *argv[])
 	__vpn_rtnl_init();
 	__connman_task_init();
 	__connman_plugin_init(option_plugin, option_noplugin);
+	__vpn_config_init();
 
 	__vpn_rtnl_start();
 
@@ -325,6 +337,7 @@ int main(int argc, char *argv[])
 
 	g_source_remove(signal);
 
+	__vpn_config_cleanup();
 	__connman_plugin_cleanup();
 	__connman_task_cleanup();
 	__vpn_rtnl_cleanup();
@@ -332,8 +345,9 @@ int main(int argc, char *argv[])
 	__vpn_manager_cleanup();
 	__vpn_provider_cleanup();
 	__connman_agent_cleanup();
+	__connman_inotify_cleanup();
 	__connman_dbus_cleanup();
-	__connman_log_cleanup(FALSE);
+	__connman_log_cleanup(false);
 
 	dbus_connection_unref(conn);
 

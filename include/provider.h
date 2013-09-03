@@ -22,8 +22,9 @@
 #ifndef __CONNMAN_PROVIDER_H
 #define __CONNMAN_PROVIDER_H
 
+#include <stdbool.h>
+
 #include <glib.h>
-#include <connman/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,6 +80,7 @@ void connman_provider_unref_debug(struct connman_provider *provider,
 			const char *file, int line, const char *caller);
 
 int connman_provider_disconnect(struct connman_provider *provider);
+int connman_provider_remove(struct connman_provider *provider);
 
 int connman_provider_set_string(struct connman_provider *provider,
 					const char *key, const char *value);
@@ -101,12 +103,14 @@ int connman_provider_set_ipaddress(struct connman_provider *provider,
 int connman_provider_set_pac(struct connman_provider *provider,
 				const char *pac);
 int connman_provider_create_service(struct connman_provider *provider);
+int connman_provider_set_immutable(struct connman_provider *provider,
+						bool immutable);
 struct connman_provider *connman_provider_get(const char *identifier);
 void connman_provider_put(struct connman_provider *provider);
 int connman_provider_set_domain(struct connman_provider *provider,
 				const char *domain);
 int connman_provider_set_nameservers(struct connman_provider *provider,
-					const char *nameservers);
+					char * const *nameservers);
 int connman_provider_append_route(struct connman_provider *provider,
 					const char *key, const char *value);
 
@@ -130,7 +134,7 @@ struct connman_provider_driver {
 	int (*create) (DBusMessage *msg, connection_ready_cb callback);
 	int (*set_routes) (struct connman_provider *provider,
 				enum connman_provider_route_type type);
-	connman_bool_t (*check_routes) (struct connman_provider *provider);
+	bool (*check_routes) (struct connman_provider *provider);
 };
 
 int connman_provider_driver_register(struct connman_provider_driver *driver);

@@ -22,7 +22,7 @@
 #ifndef __CONNMAN_PROVISION_H
 #define __CONNMAN_PROVISION_H
 
-#include <connman/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,10 +39,11 @@ struct connman_config_entry {
 	char *name;
 	void *ssid;
 	unsigned int ssid_len;
-	connman_bool_t hidden;
+	bool hidden;
 };
 
-struct connman_config_entry **connman_config_get_entries(void);
+int connman_config_provision_mutable_service(GKeyFile *keyfile);
+struct connman_config_entry **connman_config_get_entries(const char *type);
 void connman_config_free_entries(struct connman_config_entry **entries);
 
 #ifdef __cplusplus

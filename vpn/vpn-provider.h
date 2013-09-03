@@ -22,8 +22,9 @@
 #ifndef __VPN_PROVIDER_H
 #define __VPN_PROVIDER_H
 
+#include <stdbool.h>
+
 #include <glib.h>
-#include <connman/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,8 @@ void vpn_provider_unref_debug(struct vpn_provider *provider,
 			const char *file, int line, const char *caller);
 
 int vpn_provider_set_string(struct vpn_provider *provider,
+					const char *key, const char *value);
+int vpn_provider_set_string_hide_value(struct vpn_provider *provider,
 					const char *key, const char *value);
 const char *vpn_provider_get_string(struct vpn_provider *provider,
 							const char *key);

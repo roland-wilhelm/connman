@@ -22,7 +22,7 @@
 #ifndef __CONNMAN_SERVICE_H
 #define __CONNMAN_SERVICE_H
 
-#include <connman/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,7 +117,7 @@ char **connman_service_get_proxy_servers(struct connman_service *service);
 char **connman_service_get_proxy_excludes(struct connman_service *service);
 const char *connman_service_get_proxy_url(struct connman_service *service);
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service);
-connman_bool_t connman_service_get_favorite(struct connman_service *service);
+bool connman_service_get_favorite(struct connman_service *service);
 
 const char* connman_service_get_string(struct connman_service *service, const char *key);
 struct connman_service *connman_service_lookup_from_network(struct connman_network *network);

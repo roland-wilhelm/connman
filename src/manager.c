@@ -31,7 +31,7 @@
 
 #include "connman.h"
 
-static connman_bool_t connman_state_idle;
+static bool connman_state_idle;
 static DBusMessage *session_mode_pending = NULL;
 
 static DBusMessage *get_properties(DBusConnection *conn,
@@ -39,13 +39,13 @@ static DBusMessage *get_properties(DBusConnection *conn,
 {
 	DBusMessage *reply;
 	DBusMessageIter array, dict;
-	connman_bool_t offlinemode, sessionmode;
+	dbus_bool_t offlinemode, sessionmode;
 	const char *str;
 
 	DBG("conn %p", conn);
 
 	reply = dbus_message_new_method_return(msg);
-	if (reply == NULL)
+	if (!reply)
 		return NULL;
 
 	dbus_message_iter_init_append(reply, &array);
@@ -79,7 +79,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 	DBG("conn %p", conn);
 
-	if (dbus_message_iter_init(msg, &iter) == FALSE)
+	if (!dbus_message_iter_init(msg, &iter))
 		return __connman_error_invalid_arguments(msg);
 
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING)
@@ -95,8 +95,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 	type = dbus_message_iter_get_arg_type(&value);
 
-	if (g_str_equal(name, "OfflineMode") == TRUE) {
-		connman_bool_t offlinemode;
+	if (g_str_equal(name, "OfflineMode")) {
+		dbus_bool_t offlinemode;
 
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
@@ -104,20 +104,20 @@ static DBusMessage *set_property(DBusConnection *conn,
 		dbus_message_iter_get_basic(&value, &offlinemode);
 
 		__connman_technology_set_offlinemode(offlinemode);
-	} else if (g_str_equal(name, "SessionMode") == TRUE) {
-		connman_bool_t sessionmode;
+	} else if (g_str_equal(name, "SessionMode")) {
+		dbus_bool_t sessionmode;
 
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
 
 		dbus_message_iter_get_basic(&value, &sessionmode);
 
-		if (session_mode_pending != NULL)
+		if (session_mode_pending)
 			return __connman_error_in_progress(msg);
 
 		__connman_session_set_mode(sessionmode);
 
-		if (sessionmode == TRUE && connman_state_idle == FALSE) {
+		if (sessionmode && !connman_state_idle) {
 			session_mode_pending = dbus_message_ref(msg);
 			return NULL;
 		}
@@ -141,7 +141,7 @@ static DBusMessage *get_technologies(DBusConnection *conn,
 	DBG("");
 
 	reply = dbus_message_new_method_return(msg);
-	if (reply == NULL)
+	if (!reply)
 		return NULL;
 
 	__connman_dbus_append_objpath_dict_array(reply,
@@ -161,7 +161,7 @@ static DBusMessage *remove_provider(DBusConnection *conn,
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
 							DBUS_TYPE_INVALID);
 
-	err = __connman_provider_remove(path);
+	err = __connman_provider_remove_by_path(path);
 	if (err < 0)
 		return __connman_error_failed(msg, -err);
 
@@ -181,14 +181,14 @@ static void session_mode_notify(void)
 	session_mode_pending = NULL;
 }
 
-static void idle_state(connman_bool_t idle)
+static void idle_state(bool idle)
 {
 
 	DBG("idle %d", idle);
 
 	connman_state_idle = idle;
 
-	if (connman_state_idle == FALSE || session_mode_pending == NULL)
+	if (!connman_state_idle || !session_mode_pending)
 		return;
 
 	session_mode_notify();
@@ -211,7 +211,7 @@ static DBusMessage *get_services(DBusConnection *conn,
 	DBusMessage *reply;
 
 	reply = dbus_message_new_method_return(msg);
-	if (reply == NULL)
+	if (!reply)
 		return NULL;
 
 	__connman_dbus_append_objpath_dict_array(reply,
@@ -227,7 +227,7 @@ static DBusMessage *connect_provider(DBusConnection *conn,
 
 	DBG("conn %p", conn);
 
-	if (__connman_session_mode() == TRUE) {
+	if (__connman_session_mode()) {
 		connman_info("Session mode enabled: "
 				"direct provider connect disabled");
 
@@ -464,7 +464,7 @@ int __connman_manager_init(void)
 	DBG("");
 
 	connection = connman_dbus_get_connection();
-	if (connection == NULL)
+	if (!connection)
 		return -1;
 
 	if (connman_notifier_register(&technology_notifier) < 0)
@@ -475,7 +475,7 @@ int __connman_manager_init(void)
 					manager_methods,
 					manager_signals, NULL, NULL, NULL);
 
-	connman_state_idle = TRUE;
+	connman_state_idle = true;
 
 	return 0;
 }
@@ -484,10 +484,10 @@ void __connman_manager_cleanup(void)
 {
 	DBG("");
 
-	if (connection == NULL)
+	if (!connection)
 		return;
 
-	if (session_mode_pending != NULL)
+	if (session_mode_pending)
 		dbus_message_unref(session_mode_pending);
 
 	connman_notifier_unregister(&technology_notifier);

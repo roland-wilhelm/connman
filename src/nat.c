@@ -35,19 +35,20 @@ static GHashTable *nat_hash;
 struct connman_nat {
 	char *address;
 	unsigned char prefixlen;
+	struct firewall_context *fw;
 
 	char *interface;
 };
 
-static int enable_ip_forward(connman_bool_t enable)
+static int enable_ip_forward(bool enable)
 {
 	FILE *f;
 
 	f = fopen("/proc/sys/net/ipv4/ip_forward", "r+");
-	if (f == NULL)
+	if (!f)
 		return -errno;
 
-	if (enable == TRUE)
+	if (enable)
 		fprintf(f, "1");
 	else
 		fprintf(f, "0");
@@ -57,81 +58,59 @@ static int enable_ip_forward(connman_bool_t enable)
 	return 0;
 }
 
-static void flush_nat(void)
-{
-	int err;
-
-	err = __connman_iptables_command("-t nat -F POSTROUTING");
-	if (err < 0) {
-		DBG("Flushing the nat table failed");
-
-		return;
-	}
-
-	__connman_iptables_commit("nat");
-}
-
 static int enable_nat(struct connman_nat *nat)
 {
+	char *cmd;
 	int err;
 
 	g_free(nat->interface);
 	nat->interface = g_strdup(default_interface);
 
-	if (nat->interface == NULL)
+	if (!nat->interface)
 		return 0;
 
 	/* Enable masquerading */
+
 	if(nat->address) {
 
-		err = __connman_iptables_command("-t nat -A POSTROUTING "
-					"-s %s/%d -o %s -j MASQUERADE",
-					nat->address,
-					nat->prefixlen,
-					nat->interface);
-		if (err < 0)
-			return err;
+		cmd = g_strdup_printf("-s %s/%d -o %s -j MASQUERADE",
+								nat->address,
+								nat->prefixlen,
+								nat->interface);
+
 	}
 	else {
 
-		err = __connman_iptables_command("-t nat -A POSTROUTING "
-					"-o %s -j MASQUERADE",
-					nat->interface);
-		if (err < 0)
-			return err;
+		/*
+		 * TODO: Wurde durch neuen Connman merge verändert, muss nocht getestet werden.
+		 * 		 Ist der Term nur mit einem Interface noch nötig? (RW 27.08.13)
+		 */
+		cmd = g_strdup_printf("-o %s -j MASQUERADE",
+								nat->interface);
+
 	}
 
-	return __connman_iptables_commit("nat");
+	err = __connman_firewall_add_rule(nat->fw, "nat",
+				"POSTROUTING", cmd);
+	g_free(cmd);
+	if (err < 0)
+		return err;
+
+	return __connman_firewall_enable(nat->fw);
 }
 
 static void disable_nat(struct connman_nat *nat)
 {
-	int err;
-
-	if (nat->interface == NULL)
+	if (!nat->interface)
 		return;
 
 	/* Disable masquerading */
-	if(nat->address) {
 
-		err = __connman_iptables_command("-t nat -D POSTROUTING "
-						"-s %s/%d -o %s -j MASQUERADE",
-						nat->address,
-						nat->prefixlen,
-						nat->interface);
-		if (err < 0)
-			return;
-	}
-	else {
+	/*
+	 * TODO: Wurde durch neuen Connman merge verändert. Muss noch getestet werden. (RW 27.08.13)
+	 */
+	__connman_firewall_disable(nat->fw);
 
-		err = __connman_iptables_command("-t nat -D POSTROUTING "
-						"-o %s -j MASQUERADE",
-						nat->interface);
-		if (err < 0)
-			return;
-	}
-
-	__connman_iptables_commit("nat");
 }
 
 int __connman_nat_enable(const char *name, const char *address,
@@ -141,18 +120,18 @@ int __connman_nat_enable(const char *name, const char *address,
 	int err;
 
 	if (g_hash_table_size(nat_hash) == 0) {
-		err = enable_ip_forward(TRUE);
+		err = enable_ip_forward(true);
 		if (err < 0)
 			return err;
 	}
 
 	nat = g_try_new0(struct connman_nat, 1);
-	if (nat == NULL) {
-		if (g_hash_table_size(nat_hash) == 0)
-			enable_ip_forward(FALSE);
+	if (!nat)
+		goto err;
 
-		return -ENOMEM;
-	}
+	nat->fw = __connman_firewall_create();
+	if (!nat->fw)
+		goto err;
 
 	if(address != NULL)
 		nat->address = g_strdup(address);
@@ -164,6 +143,15 @@ int __connman_nat_enable(const char *name, const char *address,
 	g_hash_table_replace(nat_hash, g_strdup(name), nat);
 
 	return enable_nat(nat);
+
+err:
+	if (nat)
+		__connman_firewall_destroy(nat->fw);
+
+	if (g_hash_table_size(nat_hash) == 0)
+		enable_ip_forward(false);
+
+	return -ENOMEM;
 }
 
 void __connman_nat_disable(const char *name)
@@ -171,7 +159,7 @@ void __connman_nat_disable(const char *name)
 	struct connman_nat *nat;
 
 	nat = g_hash_table_lookup(nat_hash, name);
-	if (nat == NULL)
+	if (!nat)
 		return;
 
 	disable_nat(nat);
@@ -179,7 +167,7 @@ void __connman_nat_disable(const char *name)
 	g_hash_table_remove(nat_hash, name);
 
 	if (g_hash_table_size(nat_hash) == 0)
-		enable_ip_forward(FALSE);
+		enable_ip_forward(false);
 }
 
 static void update_default_interface(struct connman_service *service)
@@ -198,7 +186,7 @@ static void update_default_interface(struct connman_service *service)
 
 	g_hash_table_iter_init(&iter, nat_hash);
 
-	while (g_hash_table_iter_next(&iter, &key, &value) == TRUE) {
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		const char *name = key;
 		struct connman_nat *nat = value;
 
@@ -220,6 +208,7 @@ static void cleanup_nat(gpointer data)
 {
 	struct connman_nat *nat = data;
 
+	__connman_firewall_destroy(nat->fw);
 	g_free(nat->address);
 	g_free(nat->interface);
 	g_free(nat);
@@ -243,8 +232,6 @@ int __connman_nat_init(void)
 	nat_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						g_free, cleanup_nat);
 
-	flush_nat();
-
 	return 0;
 }
 
@@ -255,8 +242,6 @@ void __connman_nat_cleanup(void)
 	g_hash_table_foreach(nat_hash, shutdown_nat, NULL);
 	g_hash_table_destroy(nat_hash);
 	nat_hash = NULL;
-
-	flush_nat();
 
 	connman_notifier_unregister(&nat_notifier);
 }

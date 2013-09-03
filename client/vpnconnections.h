@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,26 +20,19 @@
  *
  */
 
+#ifndef __CONNMANCTL_VPNCONNECTIONS_H
+#define __CONNMANCTL_VPNCONNECTIONS_H
+
 #include <dbus/dbus.h>
 
-#define SIGNAL_LISTEN_TIMEOUT 10
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-struct signal_args {
-	DBusConnection *connection;
-	const char *signal_name;
-};
+void __connmanctl_vpnconnections_list(DBusMessageIter *iter);
 
-struct proxy_input {
-	char *servers;
-	char *excludes;
-};
+#ifdef __cplusplus
+}
+#endif
 
-DBusMessage *get_message(DBusConnection *connection, char *function);
-int store_proxy_input(DBusConnection *connection, DBusMessage *message,
-				char *name, int num_args, char *argv[]);
-int list_properties(DBusConnection *connection, char *function,
-			char *service_name);
-int connect_service(DBusConnection *connection, char *name);
-int disconnect_service(DBusConnection *connection, char *name);
-int set_manager(DBusConnection *connection, char *key, dbus_bool_t value);
-void listen_for_manager_signal(void *args);
+#endif /* __CONNMANCTL_VPNCONNECTIONS_H */

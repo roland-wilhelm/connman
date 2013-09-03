@@ -77,25 +77,12 @@ Core
  level of systemd integration or other factors.
 
 
-- Clean up type definitions
-
-   Priority: Medium
-   Complexity: C1
-
-   Go through variable types and use the following:
-   * uint8_t instead of connman_uint8_t, unsigned char
-   * uint16_t instead of connman_uint16_t, unsigned short
-   * bool from <stdbool.h> instead of connman_bool_t and gboolean, in the
-     latter case in those places it makes sense
-
-
 - Clean up data structure usage
 
    Priority: Medium
    Complexity: C4
 
-   Use hash tables, queues and lists in the code. Replace GSequences with
-   simpler structures. At the same time do a check on the currently used
+   Use hash tables, queues and lists in the code. Check on the currently used
    data structures and see if something can be simplified.
 
 
@@ -107,6 +94,14 @@ Core
    Create unit tests for these components starting with DHCP. Use gtest
    from GLib for this task similarly to what has been done for OBEX in Bluez
    and oFono in general.
+
+
+- Support other time sources than NTP
+
+   Priority: Medium
+   Complexity: C2
+
+   Support other time sources like cellular, GPS in addition to NTP.
 
 
 WiFi
@@ -183,18 +178,29 @@ VPN
    Complexity: C4
    Owner: Jukka Rissanen <jukka.rissanen@linux.intel.com>
 
+- L2TP & PPTP compatibility prefix removal
+
+   Priority: Medium
+   Complexity: C1
+   When: connman 2.0
+
+   The VPN config file provisioning patchset contains code that makes
+   PPP options to be marked by "PPPD." prefix. The code supports also
+   old "L2TP." and "PPTP." prefix for PPP options. Remove the compatibility
+   code and only allow "PPPD." prefix for PPP options.
+
 
 Tools
 =====
 
-- Add Agent mode to connmanctl command line tool
+- Add Session mode, VPN and Clock API support to connmanctl command line tool
 
-   Priority: Medium
+   Priority: Low
    Complexity: C2
 
-   connmanctl should implement agent prompting when started with a suitable
-   command line option. Agent mode should also be enabled when in interactive
-   mode.
+   The connmanctl command line tool should support Session mode and VPN
+   Agent with a set of suitable commands used in both interactive and
+   non-interactive mode. Also add support for Clock API.
 
 
 User Interface

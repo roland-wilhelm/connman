@@ -50,10 +50,10 @@ Properties	boolean Powered [readwrite]
 
 		boolean Connected [readonly]
 
-			Boolean representing if a technolgy is connected.
+			Boolean representing if a technology is connected.
 
 			This is just a convience property for allowing the
-			UI to easily show if this technolgy has an active
+			UI to easily show if this technology has an active
 			connection or not.
 
 			If this property is True it means that at least one
@@ -93,11 +93,3 @@ Properties	boolean Powered [readwrite]
 			This property is only valid for the WiFi technology,
 			and is then mapped to the WPA pre-shared key clients
 			will have to use in order to establish a connection.
-
-		uint32  IdleTimeout [readwrite] [experimental]
-
-			If the technology is idle for given period then it
-			will go offline if no Service with this technology
-			has AutoConnect set to True.
-
-			If the timeout is 0, this feature is disabled.

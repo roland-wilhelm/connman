@@ -35,6 +35,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <linux/if_tun.h>
+#include <netinet/in.h>
 #include <linux/if_bridge.h>
 
 #include "connman.h"
@@ -48,12 +49,11 @@
 #endif
 
 #define BRIDGE_NAME "tether"
-#define BRIDGE_DNS "8.8.8.8"
 
 #define DEFAULT_MTU	1500
 
-#define PRIVATE_NETWORK_PRIMARY_DNS BRIDGE_DNS
-#define PRIVATE_NETWORK_SECONDARY_DNS "8.8.4.4"
+static char *private_network_primary_dns = NULL;
+static char *private_network_secondary_dns = NULL;
 
 static volatile int tethering_enabled;
 static GDHCPServer *tethering_dhcp_server = NULL;
@@ -72,8 +72,8 @@ struct connman_private_network {
 	int index;
 	guint iface_watch;
 	struct connman_ippool *pool;
-	const char *primary_dns;
-	const char *secondary_dns;
+	char *primary_dns;
+	char *secondary_dns;
 };
 
 const char *__connman_tethering_get_bridge(void)
@@ -133,7 +133,7 @@ static void dhcp_server_error(GDHCPServerError error)
 }
 
 static GDHCPServer *dhcp_server_start(const char *bridge,
-				const char *router, const char* subnet,
+				const char *router, const char *subnet,
 				const char *start_ip, const char *end_ip,
 				unsigned int lease_time, const char *dns)
 {
@@ -148,7 +148,7 @@ static GDHCPServer *dhcp_server_start(const char *bridge,
 		return NULL;
 
 	dhcp_server = g_dhcp_server_new(G_DHCP_IPV4, index, &error);
-	if (dhcp_server == NULL) {
+	if (!dhcp_server) {
 		dhcp_server_error(error);
 		return NULL;
 	}
@@ -168,7 +168,7 @@ static GDHCPServer *dhcp_server_start(const char *bridge,
 
 static void dhcp_server_stop(GDHCPServer *server)
 {
-	if (server == NULL)
+	if (!server)
 		return;
 
 	g_dhcp_server_unref(server);
@@ -176,6 +176,7 @@ static void dhcp_server_stop(GDHCPServer *server)
 
 static void tethering_restart(struct connman_ippool *pool, void *user_data)
 {
+	DBG("pool %p", pool);
 	__connman_tethering_set_disabled();
 	__connman_tethering_set_enabled();
 }
@@ -191,6 +192,7 @@ void __connman_tethering_set_enabled(void)
 	const char *end_ip;
 	const char *dns;
 	unsigned char prefixlen;
+	char **ns;
 
 	DBG("enabled %d", tethering_enabled + 1);
 
@@ -206,7 +208,7 @@ void __connman_tethering_set_enabled(void)
 	index = connman_inet_ifindex(BRIDGE_NAME);
 	dhcp_ippool = __connman_ippool_create(index, 2, 252,
 						tethering_restart, NULL);
-	if (dhcp_ippool == NULL) {
+	if (!dhcp_ippool) {
 		connman_error("Fail to create IP pool");
 		__connman_bridge_remove(BRIDGE_NAME);
 		__sync_fetch_and_sub(&tethering_enabled, 1);
@@ -219,7 +221,9 @@ void __connman_tethering_set_enabled(void)
 	start_ip = __connman_ippool_get_start_ip(dhcp_ippool);
 	end_ip = __connman_ippool_get_end_ip(dhcp_ippool);
 
-	err = __connman_bridge_enable(BRIDGE_NAME, gateway, broadcast);
+	err = __connman_bridge_enable(BRIDGE_NAME, gateway,
+			__connman_ipaddress_netmask_prefix_len(subnet_mask),
+			broadcast);
 	if (err < 0 && err != -EALREADY) {
 		__connman_ippool_unref(dhcp_ippool);
 		__connman_bridge_remove(BRIDGE_NAME);
@@ -227,18 +231,35 @@ void __connman_tethering_set_enabled(void)
 		return;
 	}
 
+	ns = connman_setting_get_string_list("FallbackNameservers");
+	if (ns) {
+		if (ns[0]) {
+			g_free(private_network_primary_dns);
+			private_network_primary_dns = g_strdup(ns[0]);
+		}
+		if (ns[1]) {
+			g_free(private_network_secondary_dns);
+			private_network_secondary_dns = g_strdup(ns[1]);
+		}
+
+		DBG("Fallback ns primary %s secondary %s",
+			private_network_primary_dns,
+			private_network_secondary_dns);
+	}
+
 	dns = gateway;
 	if (__connman_dnsproxy_add_listener(index) < 0) {
 		connman_error("Can't add listener %s to DNS proxy",
 								BRIDGE_NAME);
-		dns = BRIDGE_DNS;
+		dns = private_network_primary_dns;
+		DBG("Serving %s nameserver to clients", dns);
 	}
 
 	tethering_dhcp_server = dhcp_server_start(BRIDGE_NAME,
 						gateway, subnet_mask,
 						start_ip, end_ip,
 						24 * 3600, dns);
-	if (tethering_dhcp_server == NULL) {
+	if (!tethering_dhcp_server) {
 		__connman_bridge_disable(BRIDGE_NAME);
 		__connman_ippool_unref(dhcp_ippool);
 		__connman_bridge_remove(BRIDGE_NAME);
@@ -246,9 +267,22 @@ void __connman_tethering_set_enabled(void)
 		return;
 	}
 
-	prefixlen =
-		__connman_ipaddress_netmask_prefix_len(subnet_mask);
-	__connman_nat_enable(BRIDGE_NAME, start_ip, prefixlen);
+	prefixlen = __connman_ipaddress_netmask_prefix_len(subnet_mask);
+	err = __connman_nat_enable(BRIDGE_NAME, start_ip, prefixlen);
+	if (err < 0) {
+		connman_error("Cannot enable NAT %d/%s", err, strerror(-err));
+		dhcp_server_stop(tethering_dhcp_server);
+		__connman_bridge_disable(BRIDGE_NAME);
+		__connman_ippool_unref(dhcp_ippool);
+		__connman_bridge_remove(BRIDGE_NAME);
+		__sync_fetch_and_sub(&tethering_enabled, 1);
+		return;
+	}
+
+	err = __connman_ipv6pd_setup(BRIDGE_NAME);
+	if (err < 0 && err != -EINPROGRESS)
+		DBG("Cannot setup IPv6 prefix delegation %d/%s", err,
+			strerror(-err));
 
 	DBG("tethering started");
 }
@@ -258,6 +292,8 @@ void __connman_tethering_set_disabled(void)
 	int index;
 
 	DBG("enabled %d", tethering_enabled - 1);
+
+	__connman_ipv6pd_cleanup();
 
 	index = connman_inet_ifindex(BRIDGE_NAME);
 	__connman_dnsproxy_remove_listener(index);
@@ -276,6 +312,11 @@ void __connman_tethering_set_disabled(void)
 	__connman_ippool_unref(dhcp_ippool);
 
 	__connman_bridge_remove(BRIDGE_NAME);
+
+	g_free(private_network_primary_dns);
+	private_network_primary_dns = NULL;
+	g_free(private_network_secondary_dns);
+	private_network_secondary_dns = NULL;
 
 	DBG("tethering stopped");
 }
@@ -328,9 +369,12 @@ static void setup_tun_interface(unsigned int flags, unsigned change,
 					DBUS_TYPE_STRING, &server_ip);
 	connman_dbus_dict_append_basic(&dict, "PeerIPv4",
 					DBUS_TYPE_STRING, &peer_ip);
-	connman_dbus_dict_append_basic(&dict, "PrimaryDNS",
+	if (pn->primary_dns)
+		connman_dbus_dict_append_basic(&dict, "PrimaryDNS",
 					DBUS_TYPE_STRING, &pn->primary_dns);
-	connman_dbus_dict_append_basic(&dict, "SecondaryDNS",
+
+	if (pn->secondary_dns)
+		connman_dbus_dict_append_basic(&dict, "SecondaryDNS",
 					DBUS_TYPE_STRING, &pn->secondary_dns);
 
 	connman_dbus_dict_close(&array, &dict);
@@ -366,6 +410,8 @@ static void remove_private_network(gpointer user_data)
 	g_free(pn->interface);
 	g_free(pn->owner);
 	g_free(pn->path);
+	g_free(pn->primary_dns);
+	g_free(pn->secondary_dns);
 	g_free(pn);
 }
 
@@ -423,7 +469,7 @@ int __connman_private_network_request(DBusMessage *msg, const char *owner)
 	err = connman_inet_set_mtu(index, DEFAULT_MTU);
 
 	pn = g_try_new0(struct connman_private_network, 1);
-	if (pn == NULL) {
+	if (!pn) {
 		err = -ENOMEM;
 		goto error;
 	}
@@ -434,20 +480,20 @@ int __connman_private_network_request(DBusMessage *msg, const char *owner)
 					owner_disconnect, pn, NULL);
 	pn->msg = msg;
 	pn->reply = dbus_message_new_method_return(pn->msg);
-	if (pn->reply == NULL)
+	if (!pn->reply)
 		goto error;
 
 	pn->fd = fd;
 	pn->interface = iface;
 	pn->index = index;
 	pn->pool = __connman_ippool_create(pn->index, 1, 1, ippool_disconnect, pn);
-	if (pn->pool == NULL) {
+	if (!pn->pool) {
 		errno = -ENOMEM;
 		goto error;
 	}
 
-	pn->primary_dns = PRIVATE_NETWORK_PRIMARY_DNS;
-	pn->secondary_dns = PRIVATE_NETWORK_SECONDARY_DNS;
+	pn->primary_dns = g_strdup(private_network_primary_dns);
+	pn->secondary_dns = g_strdup(private_network_secondary_dns);
 
 	pn->iface_watch = connman_rtnl_add_newlink_watch(index,
 						setup_tun_interface, pn);
@@ -469,7 +515,7 @@ int __connman_private_network_release(const char *path)
 	struct connman_private_network *pn;
 
 	pn = g_hash_table_lookup(pn_hash, path);
-	if (pn == NULL)
+	if (!pn)
 		return -EACCES;
 
 	g_hash_table_remove(pn_hash, path);
@@ -483,7 +529,7 @@ int __connman_tethering_init(void)
 	tethering_enabled = 0;
 
 	connection = connman_dbus_get_connection();
-	if (connection == NULL)
+	if (!connection)
 		return -EFAULT;
 
 	pn_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
@@ -494,10 +540,10 @@ int __connman_tethering_init(void)
 
 void __connman_tethering_cleanup(void)
 {
-	DBG("");
+	DBG("enabled %d", tethering_enabled);
 
 	__sync_synchronize();
-	if (tethering_enabled == 0) {
+	if (tethering_enabled > 0) {
 		if (tethering_dhcp_server)
 			dhcp_server_stop(tethering_dhcp_server);
 		__connman_bridge_disable(BRIDGE_NAME);
@@ -505,7 +551,7 @@ void __connman_tethering_cleanup(void)
 		__connman_nat_disable(BRIDGE_NAME);
 	}
 
-	if (connection == NULL)
+	if (!connection)
 		return;
 
 	g_hash_table_destroy(pn_hash);

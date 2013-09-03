@@ -34,7 +34,7 @@
 
 #include "connman.h"
 
-static connman_bool_t check_reply_has_dict(DBusMessage *reply)
+static bool check_reply_has_dict(DBusMessage *reply)
 {
 	const char *signature = DBUS_TYPE_ARRAY_AS_STRING
 		DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
@@ -42,8 +42,8 @@ static connman_bool_t check_reply_has_dict(DBusMessage *reply)
 		DBUS_TYPE_VARIANT_AS_STRING
 		DBUS_DICT_ENTRY_END_CHAR_AS_STRING;
 
-	if (dbus_message_has_signature(reply, signature) == TRUE)
-		return TRUE;
+	if (dbus_message_has_signature(reply, signature))
+		return true;
 
 	connman_warn("Reply %s to %s from %s has wrong signature %s",
 			signature,
@@ -51,7 +51,7 @@ static connman_bool_t check_reply_has_dict(DBusMessage *reply)
 			dbus_message_get_sender(reply),
 			dbus_message_get_signature(reply));
 
-	return FALSE;
+	return false;
 }
 
 struct request_input_reply {
@@ -63,8 +63,8 @@ struct request_input_reply {
 static void request_input_passphrase_reply(DBusMessage *reply, void *user_data)
 {
 	struct request_input_reply *passphrase_reply = user_data;
-	connman_bool_t values_received = FALSE;
-	connman_bool_t wps = FALSE;
+	bool values_received = false;
+	bool wps = false;
 	const char *error = NULL;
 	char *identity = NULL;
 	char *passphrase = NULL;
@@ -79,10 +79,10 @@ static void request_input_passphrase_reply(DBusMessage *reply, void *user_data)
 		goto done;
 	}
 
-	if (check_reply_has_dict(reply) == FALSE)
+	if (!check_reply_has_dict(reply))
 		goto done;
 
-	values_received = TRUE;
+	values_received = true;
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -105,13 +105,14 @@ static void request_input_passphrase_reply(DBusMessage *reply, void *user_data)
 
 		} else if (g_str_equal(key, "Passphrase")) {
 			dbus_message_iter_next(&entry);
-			if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
 				break;
 			dbus_message_iter_recurse(&entry, &value);
 			dbus_message_iter_get_basic(&value, &passphrase);
 
 		} else if (g_str_equal(key, "WPS")) {
-			wps = TRUE;
+			wps = true;
 
 			dbus_message_iter_next(&entry);
 			if (dbus_message_iter_get_arg_type(&entry)
@@ -161,14 +162,14 @@ static void request_input_append_alternates(DBusMessageIter *iter,
 	const char *str = user_data;
 	char **alternates, **alternative;
 
-	if (str == NULL)
+	if (!str)
 		return;
 
 	alternates = g_strsplit(str, ",", 0);
-	if (alternates == NULL)
+	if (!alternates)
 		return;
 
-	for (alternative = alternates; *alternative != NULL; alternative++)
+	for (alternative = alternates; *alternative; alternative++)
 		dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING,
 								alternative);
 
@@ -204,9 +205,9 @@ static void request_input_append_passphrase(DBusMessageIter *iter,
 	case CONNMAN_SERVICE_SECURITY_8021X:
 		phase2 = __connman_service_get_phase2(service);
 
-		if (phase2 != NULL && (
-				g_str_has_suffix(phase2, "GTC") == TRUE ||
-				g_str_has_suffix(phase2, "OTP") == TRUE))
+		if (phase2 && (
+				g_str_has_suffix(phase2, "GTC") ||
+				g_str_has_suffix(phase2, "OTP")))
 			value = "response";
 		else
 			value = "passphrase";
@@ -222,7 +223,7 @@ static void request_input_append_passphrase(DBusMessageIter *iter,
 	connman_dbus_dict_append_basic(iter, "Requirement",
 				DBUS_TYPE_STRING, &value);
 
-	if (__connman_service_wps_enabled(service) == TRUE) {
+	if (__connman_service_wps_enabled(service)) {
 		connman_dbus_dict_append_array(iter, "Alternates",
 					DBUS_TYPE_STRING,
 					request_input_append_alternates,
@@ -310,12 +311,12 @@ static void previous_passphrase_handler(DBusMessageIter *iter,
 	network = __connman_service_get_network(service);
 	data.passphrase = connman_network_get_string(network, "WiFi.PinWPS");
 
-	if (connman_network_get_bool(network, "WiFi.UseWPS") == TRUE &&
-						data.passphrase != NULL) {
+	if (connman_network_get_bool(network, "WiFi.UseWPS") &&
+						data.passphrase) {
 		data.type = "wpspin";
 	} else {
 		data.passphrase = __connman_service_get_passphrase(service);
-		if (data.passphrase == NULL)
+		if (!data.passphrase)
 			return;
 
 		security = __connman_service_get_security(service);
@@ -342,7 +343,7 @@ static void request_input_login_reply(DBusMessage *reply, void *user_data)
 {
 	struct request_input_reply *username_password_reply = user_data;
 	const char *error = NULL;
-	connman_bool_t values_received = FALSE;
+	bool values_received = false;
 	char *username = NULL;
 	char *password = NULL;
 	char *key;
@@ -353,10 +354,10 @@ static void request_input_login_reply(DBusMessage *reply, void *user_data)
 		goto done;
 	}
 
-	if (check_reply_has_dict(reply) == FALSE)
+	if (!check_reply_has_dict(reply))
 		goto done;
 
-	values_received = TRUE;
+	values_received = true;
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -410,13 +411,13 @@ int __connman_agent_request_passphrase_input(struct connman_service *service,
 
 	connman_agent_get_info(&agent_sender, &agent_path);
 
-	if (service == NULL || agent_path == NULL || callback == NULL)
+	if (!service || !agent_path || !callback)
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
 					CONNMAN_AGENT_INTERFACE,
 					"RequestInput");
-	if (message == NULL)
+	if (!message)
 		return -ENOMEM;
 
 	dbus_message_iter_init_append(message, &iter);
@@ -443,20 +444,19 @@ int __connman_agent_request_passphrase_input(struct connman_service *service,
 	if (__connman_service_get_security(service) !=
 			CONNMAN_SERVICE_SECURITY_NONE) {
 		connman_dbus_dict_append_dict(&dict, "Passphrase",
-					request_input_append_passphrase, service);
+				request_input_append_passphrase, service);
 
 		previous_passphrase_handler(&dict, service);
 	}
 
-	if (__connman_service_wps_enabled(service) == TRUE) {
-	    connman_dbus_dict_append_dict(&dict, "WPS",
+	if (__connman_service_wps_enabled(service))
+		connman_dbus_dict_append_dict(&dict, "WPS",
 				request_input_append_wps, NULL);
-	}
 
 	connman_dbus_dict_close(&iter, &dict);
 
 	passphrase_reply = g_try_new0(struct request_input_reply, 1);
-	if (passphrase_reply == NULL) {
+	if (!passphrase_reply) {
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}
@@ -494,13 +494,13 @@ int __connman_agent_request_login_input(struct connman_service *service,
 
 	connman_agent_get_info(&agent_sender, &agent_path);
 
-	if (service == NULL || agent_path == NULL || callback == NULL)
+	if (!service || !agent_path || !callback)
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
 					CONNMAN_AGENT_INTERFACE,
 					"RequestInput");
-	if (message == NULL)
+	if (!message)
 		return -ENOMEM;
 
 	dbus_message_iter_init_append(message, &iter);
@@ -520,7 +520,7 @@ int __connman_agent_request_login_input(struct connman_service *service,
 	connman_dbus_dict_close(&iter, &dict);
 
 	username_password_reply = g_try_new0(struct request_input_reply, 1);
-	if (username_password_reply == NULL) {
+	if (!username_password_reply) {
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}
@@ -553,7 +553,7 @@ struct request_browser_reply_data {
 static void request_browser_reply(DBusMessage *reply, void *user_data)
 {
 	struct request_browser_reply_data *browser_reply_data = user_data;
-	connman_bool_t result = FALSE;
+	bool result = false;
 	const char *error = NULL;
 
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
@@ -561,7 +561,7 @@ static void request_browser_reply(DBusMessage *reply, void *user_data)
 		goto done;
 	}
 
-	result = TRUE;
+	result = true;
 
 done:
 	browser_reply_data->callback(browser_reply_data->service, result,
@@ -581,16 +581,16 @@ int __connman_agent_request_browser(struct connman_service *service,
 
 	connman_agent_get_info(&agent_sender, &agent_path);
 
-	if (service == NULL || agent_path == NULL || callback == NULL)
+	if (!service || !agent_path || !callback)
 		return -ESRCH;
 
-	if (url == NULL)
+	if (!url)
 		url = "";
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
 					CONNMAN_AGENT_INTERFACE,
 					"RequestBrowser");
-	if (message == NULL)
+	if (!message)
 		return -ENOMEM;
 
 	dbus_message_iter_init_append(message, &iter);
@@ -601,7 +601,7 @@ int __connman_agent_request_browser(struct connman_service *service,
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &url);
 
 	browser_reply_data = g_try_new0(struct request_browser_reply_data, 1);
-	if (browser_reply_data == NULL) {
+	if (!browser_reply_data) {
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}

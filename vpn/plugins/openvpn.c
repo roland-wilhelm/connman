@@ -23,6 +23,7 @@
 #include <config.h>
 #endif
 
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -72,43 +73,92 @@ struct {
 	{ "OpenVPN.ConfigFile", "--config", 1 },
 };
 
-static void ov_append_dns_entries(const char *key, const char *value,
-					char **dns_entries)
+struct nameserver_entry {
+	int id;
+	char *nameserver;
+};
+
+static struct nameserver_entry *ov_append_dns_entries(const char *key,
+						const char *value)
 {
+	struct nameserver_entry *entry = NULL;
 	gchar **options;
 
-	if (g_str_has_prefix(key, "foreign_option_") == FALSE)
-		return;
+	if (!g_str_has_prefix(key, "foreign_option_"))
+		return NULL;
 
 	options = g_strsplit(value, " ", 3);
-	if (options[0] != NULL &&
+	if (options[0] &&
 		!strcmp(options[0], "dhcp-option") &&
-			options[1] != NULL &&
+			options[1] &&
 			!strcmp(options[1], "DNS") &&
-				options[2] != NULL) {
+				options[2]) {
 
-		if (*dns_entries != NULL) {
-			char *tmp;
+		entry = g_try_new(struct nameserver_entry, 1);
+		if (!entry)
+			return NULL;
 
-			tmp = g_strjoin(" ", *dns_entries,
-						options[2], NULL);
-			g_free(*dns_entries);
-			*dns_entries = tmp;
-		} else {
-			*dns_entries = g_strdup(options[2]);
-		}
+		entry->nameserver = g_strdup(options[2]);
+		entry->id = atoi(key + 15); /* foreign_option_XXX */
 	}
 
 	g_strfreev(options);
+
+	return entry;
+}
+
+static char *ov_get_domain_name(const char *key, const char *value)
+{
+	gchar **options;
+	char *domain = NULL;
+
+	if (!g_str_has_prefix(key, "foreign_option_"))
+		return NULL;
+
+	options = g_strsplit(value, " ", 3);
+	if (options[0] &&
+		!strcmp(options[0], "dhcp-option") &&
+			options[1] &&
+			!strcmp(options[1], "DOMAIN") &&
+				options[2]) {
+
+		domain = g_strdup(options[2]);
+	}
+
+	g_strfreev(options);
+
+	return domain;
+}
+
+static gint cmp_ns(gconstpointer a, gconstpointer b)
+{
+	struct nameserver_entry *entry_a = (struct nameserver_entry *)a;
+	struct nameserver_entry *entry_b = (struct nameserver_entry *)b;
+
+	if (entry_a->id < entry_b->id)
+		return -1;
+
+	if (entry_a->id > entry_b->id)
+		return 1;
+
+	return 0;
+}
+
+static void free_ns_entry(gpointer data)
+{
+	struct nameserver_entry *entry = data;
+
+	g_free(entry->nameserver);
+	g_free(entry);
 }
 
 static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 {
 	DBusMessageIter iter, dict;
 	const char *reason, *key, *value;
-	char *nameservers = NULL;
 	char *address = NULL, *gateway = NULL, *peer = NULL;
 	struct connman_ipaddress *ipaddress;
+	GSList *nameserver_list = NULL;
 
 	dbus_message_iter_init(msg, &iter);
 
@@ -126,6 +176,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	dbus_message_iter_recurse(&iter, &dict);
 
 	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		struct nameserver_entry *ns_entry = NULL;
 		DBusMessageIter entry;
 
 		dbus_message_iter_recurse(&dict, &entry);
@@ -135,32 +186,35 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 
 		DBG("%s = %s", key, value);
 
-		if (!strcmp(key, "trusted_ip")) {
-			vpn_provider_set_string(provider, "Gateway", value);
+		if (!strcmp(key, "trusted_ip"))
 			gateway = g_strdup(value);
-		}
 
-		if (!strcmp(key, "ifconfig_local")) {
-			vpn_provider_set_string(provider, "Address", value);
+		if (!strcmp(key, "ifconfig_local"))
 			address = g_strdup(value);
-		}
 
-		if (!strcmp(key, "ifconfig_remote")) {
-			vpn_provider_set_string(provider, "Peer", value);
+		if (!strcmp(key, "ifconfig_remote"))
 			peer = g_strdup(value);
-		}
 
-		if (g_str_has_prefix(key, "route_") == TRUE)
+		if (g_str_has_prefix(key, "route_"))
 			vpn_provider_append_route(provider, key, value);
 
-		ov_append_dns_entries(key, value, &nameservers);
+		if ((ns_entry = ov_append_dns_entries(key, value)))
+			nameserver_list = g_slist_prepend(nameserver_list,
+							ns_entry);
+		else {
+			char *domain = ov_get_domain_name(key, value);
+			if (domain) {
+				vpn_provider_set_domain(provider, domain);
+				g_free(domain);
+			}
+		}
 
 		dbus_message_iter_next(&dict);
 	}
 
 	ipaddress = connman_ipaddress_alloc(AF_INET);
-	if (ipaddress == NULL) {
-		g_free(nameservers);
+	if (!ipaddress) {
+		g_slist_free_full(nameserver_list, free_ns_entry);
 		g_free(address);
 		g_free(gateway);
 		g_free(peer);
@@ -172,9 +226,33 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	connman_ipaddress_set_peer(ipaddress, peer);
 	vpn_provider_set_ipaddress(provider, ipaddress);
 
-	vpn_provider_set_nameservers(provider, nameservers);
+	if (nameserver_list) {
+		char *nameservers = NULL;
+		GSList *tmp;
 
-	g_free(nameservers);
+		nameserver_list = g_slist_sort(nameserver_list, cmp_ns);
+		for (tmp = nameserver_list; tmp;
+						tmp = g_slist_next(tmp)) {
+			struct nameserver_entry *ns = tmp->data;
+
+			if (!nameservers) {
+				nameservers = g_strdup(ns->nameserver);
+			} else {
+				char *str;
+				str = g_strjoin(" ", nameservers,
+						ns->nameserver, NULL);
+				g_free(nameservers);
+				nameservers = str;
+			}
+		}
+
+		g_slist_free_full(nameserver_list, free_ns_entry);
+
+		vpn_provider_set_nameservers(provider, nameservers);
+
+		g_free(nameservers);
+	}
+
 	g_free(address);
 	g_free(gateway);
 	g_free(peer);
@@ -192,7 +270,7 @@ static int ov_save(struct vpn_provider *provider, GKeyFile *keyfile)
 		if (strncmp(ov_options[i].cm_opt, "OpenVPN.", 8) == 0) {
 			option = vpn_provider_get_string(provider,
 							ov_options[i].cm_opt);
-			if (option == NULL)
+			if (!option)
 				continue;
 
 			g_key_file_set_string(keyfile,
@@ -210,12 +288,12 @@ static int task_append_config_data(struct vpn_provider *provider,
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(ov_options); i++) {
-		if (ov_options[i].ov_opt == NULL)
+		if (!ov_options[i].ov_opt)
 			continue;
 
 		option = vpn_provider_get_string(provider,
 					ov_options[i].cm_opt);
-		if (option == NULL)
+		if (!option)
 			continue;
 
 		if (connman_task_add_argument(task,
@@ -236,7 +314,7 @@ static int ov_connect(struct vpn_provider *provider,
 	int err = 0, fd;
 
 	option = vpn_provider_get_string(provider, "Host");
-	if (option == NULL) {
+	if (!option) {
 		connman_error("Host not set; cannot enable VPN");
 		return -EINVAL;
 	}
@@ -244,16 +322,16 @@ static int ov_connect(struct vpn_provider *provider,
 	task_append_config_data(provider, task);
 
 	option = vpn_provider_get_string(provider, "OpenVPN.ConfigFile");
-	if (option == NULL) {
+	if (!option) {
 		/*
 		 * Set some default options if user has no config file.
 		 */
 		option = vpn_provider_get_string(provider, "OpenVPN.TLSAuth");
-		if (option != NULL) {
+		if (option) {
 			connman_task_add_argument(task, "--tls-auth", option);
 			option = vpn_provider_get_string(provider,
 							"OpenVPN.TLSAuthDir");
-			if (option != NULL)
+			if (option)
 				connman_task_add_argument(task, option, NULL);
 		}
 
@@ -310,7 +388,7 @@ static int ov_connect(struct vpn_provider *provider,
 	}
 
 done:
-	if (cb != NULL)
+	if (cb)
 		cb(provider, user_data, err);
 
 	return err;

@@ -23,7 +23,6 @@
 #define __CONNMAN_SESSION_H
 
 #include <connman/service.h>
-#include <connman/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,17 +48,26 @@ enum connman_session_type {
 	CONNMAN_SESSION_TYPE_INTERNET = 3,
 };
 
+enum connman_session_id_type {
+	CONNMAN_SESSION_ID_TYPE_UNKNOWN = 0,
+	CONNMAN_SESSION_ID_TYPE_UID	= 1,
+	CONNMAN_SESSION_ID_TYPE_GID	= 2,
+	CONNMAN_SESSION_ID_TYPE_LSM	= 3,
+};
+
 struct connman_session;
 
 struct connman_session_config {
-	connman_bool_t priority;
+	enum connman_session_id_type id_type;
+	char *id;
+	bool priority;
 	enum connman_session_roaming_policy roaming_policy;
 	enum connman_session_type type;
-	connman_bool_t ecall;
+	bool ecall;
 	GSList *allowed_bearers;
 };
 
-typedef int (* connman_session_config_cb) (struct connman_session *session,
+typedef int (* connman_session_config_func_t) (struct connman_session *session,
 					struct connman_session_config *config,
 					void *user_data, int err);
 
@@ -67,7 +75,7 @@ struct connman_session_policy {
 	const char *name;
 	int priority;
 	int (*create)(struct connman_session *session,
-			connman_session_config_cb callback,
+			connman_session_config_func_t cb,
 			void *user_data);
 	void (*destroy)(struct connman_session *session);
 };
@@ -78,7 +86,7 @@ void connman_session_policy_unregister(struct connman_session_policy *config);
 int connman_session_config_update(struct connman_session *session);
 void connman_session_destroy(struct connman_session *session);
 
-int connman_session_set_default_config(struct connman_session_config *config);
+void connman_session_set_default_config(struct connman_session_config *config);
 struct connman_session_config *connman_session_create_default_config(void);
 
 enum connman_session_roaming_policy connman_session_parse_roaming_policy(const char *policy);

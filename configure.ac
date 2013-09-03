@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(connman, 1.11)
+AC_INIT(connman, 1.17)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS([config.h])
@@ -56,10 +56,6 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 		LDFLAGS="$LDFLAGS -pie"
 	fi
 ])
-
-AC_ARG_ENABLE(threads,
-	AC_HELP_STRING([--enable-threads], [enable threading support]),
-			[enable_threads=${enableval}], [enable_threads="no"])
 
 AC_ARG_ENABLE(hh2serial-gps,
 	AC_HELP_STRING([--enable-hh2serial-gps], [enable hh2serial GPS support]),
@@ -216,14 +212,6 @@ PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
-if (test "${enable_threads}" = "yes"); then
-	AC_DEFINE(NEED_THREADS, 1, [Define if threading support is required])
-	PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16, dummy=yes,
-				AC_MSG_ERROR(GThread >= 2.16 is required))
-	GLIB_CFLAGS="$GLIB_CFLAGS $GTHREAD_CFLAGS"
-	GLIB_LIBS="$GLIB_LIBS $GTHREAD_LIBS"
-fi
-
 PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
 				AC_MSG_ERROR(D-Bus >= 1.4 is required))
 AC_SUBST(DBUS_CFLAGS)
@@ -258,7 +246,7 @@ if (test -n "${path_systemdunit}"); then
 fi
 AM_CONDITIONAL(SYSTEMD, test -n "${path_systemdunit}")
 
-PKG_CHECK_MODULES(XTABLES, xtables, dummy=yes,
+PKG_CHECK_MODULES(XTABLES, xtables >= 1.4.11, dummy=yes,
 				AC_MSG_ERROR(Xtables library is required))
 AC_SUBST(XTABLES_CFLAGS)
 AC_SUBST(XTABLES_LIBS)
@@ -335,6 +323,11 @@ AC_ARG_ENABLE(pacrunner, AC_HELP_STRING([--disable-pacrunner],
 					[enable_pacrunner=${enableval}])
 AM_CONDITIONAL(PACRUNNER, test "${enable_pacrunner}" != "no")
 
+AC_ARG_ENABLE(neard, AC_HELP_STRING([--disable-neard],
+				[disable Neard support]),
+					[enable_neard=${enableval}])
+AM_CONDITIONAL(NEARD, test "${enable_neard}" != "no")
+
 AC_ARG_ENABLE(wispr, AC_HELP_STRING([--disable-wispr],
 				[disable WISPr support]),
 					[enable_wispr=${enableval}])
@@ -344,6 +337,15 @@ AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])
 AM_CONDITIONAL(TOOLS, test "${enable_tools}" != "no")
+
+if (test "${enable_tools}" != "no"); then
+	AC_PATH_PROGS(IPTABLES_SAVE, [iptables-save], [],
+						$PATH:/sbin:/usr/sbin)
+	IPTABLES_SAVE=$ac_cv_path_IPTABLES_SAVE
+else
+	IPTABLES_SAVE=""
+fi
+AC_SUBST(IPTABLES_SAVE)
 
 AC_ARG_ENABLE(client, AC_HELP_STRING([--disable-client],
 				[disable command line client]),

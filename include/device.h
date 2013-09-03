@@ -22,7 +22,6 @@
 #ifndef __CONNMAN_DEVICE_H
 #define __CONNMAN_DEVICE_H
 
-#include <connman/types.h>
 #include <connman/network.h>
 
 #ifdef __cplusplus
@@ -80,16 +79,16 @@ void connman_device_set_ident(struct connman_device *device,
 const char *connman_device_get_ident(struct connman_device *device);
 
 int connman_device_set_powered(struct connman_device *device,
-						connman_bool_t powered);
-connman_bool_t connman_device_get_powered(struct connman_device *device);
+						bool powered);
+bool connman_device_get_powered(struct connman_device *device);
 int connman_device_set_scanning(struct connman_device *device,
-						connman_bool_t scanning);
-connman_bool_t connman_device_get_scanning(struct connman_device *device);
+						bool scanning);
+bool connman_device_get_scanning(struct connman_device *device);
 void connman_device_reset_scanning(struct connman_device *device);
 
 int connman_device_set_disconnected(struct connman_device *device,
-						connman_bool_t disconnected);
-connman_bool_t connman_device_get_disconnected(struct connman_device *device);
+						bool disconnected);
+bool connman_device_get_disconnected(struct connman_device *device);
 
 int connman_device_set_string(struct connman_device *device,
 					const char *key, const char *value);
@@ -115,6 +114,9 @@ int connman_device_set_regdom(struct connman_device *device,
 void connman_device_regdom_notify(struct connman_device *device,
 					int result, const char *alpha2);
 struct connman_device *connman_device_create_from_index(int index);
+struct connman_device *connman_device_find_by_index(int index);
+int connman_device_disconnect_service(struct connman_device *device);
+int connman_device_reconnect_service(struct connman_device *device);
 
 struct connman_device_driver {
 	const char *name;

@@ -76,6 +76,8 @@ struct {
 } pppd_options[] = {
 	{ "L2TP.User", "name", OPT_ALL, NULL, OPT_STRING },
 	{ "L2TP.BPS", "bps", OPT_L2, NULL, OPT_STRING },
+	{ "L2TP.TXBPS", "tx bps", OPT_L2, NULL, OPT_STRING },
+	{ "L2TP.RXBPS", "rx bps", OPT_L2, NULL, OPT_STRING },
 	{ "L2TP.LengthBit", "length bit", OPT_L2, NULL, OPT_STRING },
 	{ "L2TP.Challenge", "challenge", OPT_L2, NULL, OPT_STRING },
 	{ "L2TP.DefaultRoute", "defaultroute", OPT_L2, NULL, OPT_STRING },
@@ -96,23 +98,23 @@ struct {
 	{ "L2TP.Rand Source", "rand source", OPT_L2G, NULL, OPT_STRING },
 	{ "L2TP.IPsecSaref", "ipsec saref", OPT_L2G, NULL, OPT_STRING },
 	{ "L2TP.Port", "port", OPT_L2G, NULL, OPT_STRING },
-	{ "L2TP.EchoFailure", "lcp-echo-failure", OPT_PPPD, "0", OPT_STRING },
-	{ "L2TP.EchoInterval", "lcp-echo-interval", OPT_PPPD, "0", OPT_STRING },
-	{ "L2TP.Debug", "debug", OPT_PPPD, NULL, OPT_STRING },
-	{ "L2TP.RefuseEAP", "refuse-eap", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.RefusePAP", "refuse-pap", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.RefuseCHAP", "refuse-chap", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.RefuseMSCHAP", "refuse-mschap", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.RefuseMSCHAP2", "refuse-mschapv2", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.NoBSDComp", "nobsdcomp", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.NoPcomp", "nopcomp", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.UseAccomp", "accomp", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.NoDeflate", "nodeflatey", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.ReqMPPE", "require-mppe", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.ReqMPPE40", "require-mppe-40", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.ReqMPPE128", "require-mppe-128", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.ReqMPPEStateful", "mppe-stateful", OPT_PPPD, NULL, OPT_BOOL },
-	{ "L2TP.NoVJ", "no-vj-comp", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.EchoFailure", "lcp-echo-failure", OPT_PPPD, "0", OPT_STRING },
+	{ "PPPD.EchoInterval", "lcp-echo-interval", OPT_PPPD, "0", OPT_STRING },
+	{ "PPPD.Debug", "debug", OPT_PPPD, NULL, OPT_STRING },
+	{ "PPPD.RefuseEAP", "refuse-eap", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.RefusePAP", "refuse-pap", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.RefuseCHAP", "refuse-chap", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.RefuseMSCHAP", "refuse-mschap", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.RefuseMSCHAP2", "refuse-mschapv2", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.NoBSDComp", "nobsdcomp", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.NoPcomp", "nopcomp", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.UseAccomp", "accomp", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.NoDeflate", "nodeflate", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPE", "require-mppe", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPE40", "require-mppe-40", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPE128", "require-mppe-128", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPEStateful", "mppe-stateful", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.NoVJ", "no-vj-comp", OPT_PPPD, NULL, OPT_BOOL },
 };
 
 static DBusConnection *connection;
@@ -130,18 +132,18 @@ static DBusMessage *l2tp_get_sec(struct connman_task *task,
 	const char *user, *passwd;
 	struct vpn_provider *provider = user_data;
 
-	if (dbus_message_get_no_reply(msg) == FALSE) {
+	if (!dbus_message_get_no_reply(msg)) {
 		DBusMessage *reply;
 
 		user = vpn_provider_get_string(provider, "L2TP.User");
 		passwd = vpn_provider_get_string(provider, "L2TP.Password");
 
-		if (user == NULL || strlen(user) == 0 ||
-				passwd == NULL || strlen(passwd) == 0)
+		if (!user || strlen(user) == 0 ||
+				!passwd || strlen(passwd) == 0)
 			return NULL;
 
 		reply = dbus_message_new_method_return(msg);
-		if (reply == NULL)
+		if (!reply)
 			return NULL;
 
 		dbus_message_append_args(reply, DBUS_TYPE_STRING, &user,
@@ -172,8 +174,14 @@ static int l2tp_notify(DBusMessage *msg, struct vpn_provider *provider)
 		return VPN_STATE_FAILURE;
 	}
 
-	if (strcmp(reason, "auth failed") == 0)
+	if (strcmp(reason, "auth failed") == 0) {
+		DBG("authentication failure");
+
+		vpn_provider_set_string(provider, "L2TP.User", NULL);
+		vpn_provider_set_string(provider, "L2TP.Password", NULL);
+
 		return VPN_STATE_AUTH_FAILURE;
+	}
 
 	if (strcmp(reason, "connect"))
 		return VPN_STATE_DISCONNECT;
@@ -190,20 +198,14 @@ static int l2tp_notify(DBusMessage *msg, struct vpn_provider *provider)
 
 		DBG("%s = %s", key, value);
 
-		if (!strcmp(key, "INTERNAL_IP4_ADDRESS")) {
-			vpn_provider_set_string(provider, "Address", value);
+		if (!strcmp(key, "INTERNAL_IP4_ADDRESS"))
 			addressv4 = g_strdup(value);
-		}
 
-		if (!strcmp(key, "INTERNAL_IP4_NETMASK")) {
-			vpn_provider_set_string(provider, "Netmask", value);
+		if (!strcmp(key, "INTERNAL_IP4_NETMASK"))
 			netmask = g_strdup(value);
-		}
 
-		if (!strcmp(key, "INTERNAL_IP4_DNS")) {
-			vpn_provider_set_string(provider, "DNS", value);
+		if (!strcmp(key, "INTERNAL_IP4_DNS"))
 			nameservers = g_strdup(value);
-		}
 
 		if (!strcmp(key, "INTERNAL_IFNAME"))
 			ifname = g_strdup(value);
@@ -219,12 +221,12 @@ static int l2tp_notify(DBusMessage *msg, struct vpn_provider *provider)
 		return VPN_STATE_FAILURE;
 	}
 
-	if (addressv4 != NULL)
+	if (addressv4)
 		ipaddress = connman_ipaddress_alloc(AF_INET);
 
 	g_free(ifname);
 
-	if (ipaddress == NULL) {
+	if (!ipaddress) {
 		connman_error("No IP address for provider");
 		g_free(addressv4);
 		g_free(netmask);
@@ -233,12 +235,12 @@ static int l2tp_notify(DBusMessage *msg, struct vpn_provider *provider)
 	}
 
 	value = vpn_provider_get_string(provider, "HostIP");
-	if (value != NULL) {
+	if (value) {
 		vpn_provider_set_string(provider, "Gateway", value);
 		gateway = g_strdup(value);
 	}
 
-	if (addressv4 != NULL)
+	if (addressv4)
 		connman_ipaddress_set_ipv4(ipaddress, addressv4, netmask,
 					gateway);
 
@@ -257,14 +259,40 @@ static int l2tp_notify(DBusMessage *msg, struct vpn_provider *provider)
 static int l2tp_save(struct vpn_provider *provider, GKeyFile *keyfile)
 {
 	const char *option;
+	bool l2tp_option, pppd_option;
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(pppd_options); i++) {
-		if (strncmp(pppd_options[i].cm_opt, "L2TP.", 5) == 0) {
+		l2tp_option = pppd_option = false;
+
+		if (strncmp(pppd_options[i].cm_opt, "L2TP.", 5) == 0)
+			l2tp_option = true;
+
+		if (strncmp(pppd_options[i].cm_opt, "PPPD.", 5) == 0)
+			pppd_option = true;
+
+		if (l2tp_option || pppd_option) {
 			option = vpn_provider_get_string(provider,
-							pppd_options[i].cm_opt);
-			if (option == NULL)
-				continue;
+						pppd_options[i].cm_opt);
+			if (!option) {
+				/*
+				 * Check if the option prefix is L2TP as the
+				 * PPPD options were using L2TP prefix earlier.
+				 */
+				char *l2tp_str;
+
+				if (!pppd_option)
+					continue;
+
+				l2tp_str = g_strdup_printf("L2TP.%s",
+						&pppd_options[i].cm_opt[5]);
+				option = vpn_provider_get_string(provider,
+								l2tp_str);
+				g_free(l2tp_str);
+
+				if (!option)
+					continue;
+			}
 
 			g_key_file_set_string(keyfile,
 					vpn_provider_get_save_group(provider),
@@ -299,7 +327,7 @@ static ssize_t l2tp_write_bool_option(int fd,
 	gchar *buf;
 	ssize_t ret = 0;
 
-	if (key != NULL && value != NULL) {
+	if (key && value) {
 		if (strcasecmp(value, "yes") == 0 ||
 				strcasecmp(value, "true") == 0 ||
 				strcmp(value, "1") == 0) {
@@ -318,8 +346,8 @@ static int l2tp_write_option(int fd, const char *key, const char *value)
 	gchar *buf;
 	ssize_t ret = 0;
 
-	if (key != NULL) {
-		if (value != NULL)
+	if (key) {
+		if (value)
 			buf = g_strdup_printf("%s %s\n", key, value);
 		else
 			buf = g_strdup_printf("%s\n", key);
@@ -337,7 +365,7 @@ static int l2tp_write_section(int fd, const char *key, const char *value)
 	gchar *buf;
 	ssize_t ret = 0;
 
-	if (key != NULL && value != NULL) {
+	if (key && value) {
 		buf = g_strdup_printf("%s = %s\n", key, value);
 		ret = full_write(fd, buf, strlen(buf));
 
@@ -474,7 +502,7 @@ static void request_input_reply(DBusMessage *reply, void *user_data)
 		goto done;
 	}
 
-	if (vpn_agent_check_reply_has_dict(reply) == FALSE)
+	if (!vpn_agent_check_reply_has_dict(reply))
 		goto done;
 
 	dbus_message_iter_init(reply, &iter);
@@ -544,13 +572,13 @@ static int request_input(struct vpn_provider *provider,
 
 	connman_agent_get_info(&agent_sender, &agent_path);
 
-	if (provider == NULL || agent_path == NULL || callback == NULL)
+	if (!provider || !agent_path || !callback)
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
 					VPN_AGENT_INTERFACE,
 					"RequestInput");
-	if (message == NULL)
+	if (!message)
 		return -ENOMEM;
 
 	dbus_message_iter_init_append(message, &iter);
@@ -568,7 +596,7 @@ static int request_input(struct vpn_provider *provider,
 	connman_dbus_dict_close(&iter, &dict);
 
 	l2tp_reply = g_try_new0(struct request_input_reply, 1);
-	if (l2tp_reply == NULL) {
+	if (!l2tp_reply) {
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}
@@ -601,15 +629,12 @@ static int run_connect(struct vpn_provider *provider,
 	int l2tp_fd, pppd_fd;
 	int err;
 
-	if (username == NULL || password == NULL) {
+	if (!username || !password) {
 		DBG("Cannot connect username %s password %p",
 						username, password);
 		err = -EINVAL;
 		goto done;
 	}
-
-	vpn_provider_set_string(provider, "L2TP.User", username);
-	vpn_provider_set_string(provider, "L2TP.Password", password);
 
 	DBG("username %s password %p", username, password);
 
@@ -654,7 +679,7 @@ static int run_connect(struct vpn_provider *provider,
 	}
 
 done:
-	if (cb != NULL)
+	if (cb)
 		cb(provider, user_data, err);
 
 	return err;
@@ -673,11 +698,15 @@ static void request_input_cb(struct vpn_provider *provider,
 {
 	struct l2tp_private_data *data = user_data;
 
-	if (username == NULL || password == NULL)
+	if (!username || !password)
 		DBG("Requesting username %s or password failed, error %s",
 			username, error);
-	else if (error != NULL)
+	else if (error)
 		DBG("error %s", error);
+
+	vpn_provider_set_string(provider, "L2TP.User", username);
+	vpn_provider_set_string_hide_value(provider, "L2TP.Password",
+								password);
 
 	run_connect(provider, data->task, data->if_name, data->cb,
 		data->user_data, username, password);
@@ -703,11 +732,11 @@ static int l2tp_connect(struct vpn_provider *provider,
 
 	DBG("user %s password %p", username, password);
 
-	if (username == NULL || password == NULL) {
+	if (!username || !password) {
 		struct l2tp_private_data *data;
 
 		data = g_try_new0(struct l2tp_private_data, 1);
-		if (data == NULL)
+		if (!data)
 			return -ENOMEM;
 
 		data->task = task;
@@ -728,7 +757,7 @@ done:
 							username, password);
 
 error:
-	if (cb != NULL)
+	if (cb)
 		cb(provider, user_data, err);
 
 	return err;
